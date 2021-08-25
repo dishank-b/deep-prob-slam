@@ -340,9 +340,10 @@ def plot_trajectory(fignum, values, scale=0.5, marginals=None,
         plot_pose2_on_axes(axes, pose, covariance=covariance,
                            axis_length=scale)
     axes.plot(*zip(*[poses.atPose2(key).translation() for key in poses.keys()]), **kwargs)
+    axes.axis('equal')
+    axes.legend()
     fig.suptitle(title)
     fig.canvas.set_window_title(title.lower())
-    fig.legend()
 
 
 def plot_incremental_trajectory(fignum, values, start=0,
@@ -409,6 +410,7 @@ def plot_landmarks(fignum, point2s, landmark_keys, marginals=None, **kwargs):
             axes.add_patch(ellipse)
     
     axes.legend()
+    axes.axis('equal')
 
 
 
