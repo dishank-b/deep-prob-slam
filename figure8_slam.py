@@ -14,7 +14,7 @@ wb.login()
 #=============Config=============#
 
 wb.init(
-    # mode="disabled",
+    mode="disabled",
     project="deep-prob-slam",
     config = {
     "seed": 6,
@@ -122,13 +122,13 @@ uncalib_MEASUREMENT_NOISE = gtsam.noiseModel.Diagonal.Sigmas(np.array(config.unc
 graph = gtsam.NonlinearFactorGraph()
 
 # inital guess of values for optimizer
-# initial_estimate = gtsam.Values()
+initial_estimate = gtsam.Values()
 
 #---------Adding odometry factors and landmark measurement factors----------------#
 for idx, robo_pose in enumerate(trajectory):
     if idx==0:
         graph.add(gtsam.PriorFactorPose2(Xs[idx], gtsam.Pose2(*robo_pose), PRIOR_NOISE))
-        # initial_estimate.insert(Xs[idx], gtsam.Pose2(*robo_pose))
+        initial_estimate.insert(Xs[idx], gtsam.Pose2(*robo_pose))
 
     if idx>0:
         diff = robo_pose - trajectory[idx-1]
@@ -137,9 +137,9 @@ for idx, robo_pose in enumerate(trajectory):
         odometry = np.array([d*np.cos(delta), d*np.sin(delta), diff[2]])
         odometry = np.random.multivariate_normal(odometry, ODOMETRY_NOISE.covariance())
         odometry = gtsam.Pose2(*odometry) # his odometry has to be wrt current robot frame, so directly taking different between two robot poses will give odom in ground frame. 
-        # graph.add(gtsam.BetweenFactorPose2(Xs[idx-1], Xs[idx], odometry, ODOMETRY_NOISE))
-        graph.add(gtsam.BetweenFactorPose2(Xs[idx-1], Xs[idx], odometry, uncalib_ODOMETRY_NOISE))
-        # initial_estimate.insert(Xs[idx], initial_estimate.atPose2(Xs[idx-1]).transformFrom(odometry_np))
+        graph.add(gtsam.BetweenFactorPose2(Xs[idx-1], Xs[idx], odometry, ODOMETRY_NOISE))
+        # graph.add(gtsam.BetweenFactorPose2(Xs[idx-1], Xs[idx], odometry, uncalib_ODOMETRY_NOISE))
+        initial_estimate.insert(Xs[idx], initial_estimate.atPose2(Xs[idx-1]).compose(odometry))
  
 
     for j, land_pose in enumerate(landmarks):
@@ -152,18 +152,24 @@ for idx, robo_pose in enumerate(trajectory):
         if d < config.SENSOR_RANGE:
             # graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, MEASUREMENT_NOISE))
             graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, uncalib_MEASUREMENT_NOISE))
-            # if not initial_estimate.exists(Ls[j]):
-                # initial_estimate.insert(Ls[j], initial_estimate.atPose2(Xs[idx]).transformFrom(gtsam.Point2(d*np.cos(delta), d*np.sin(delta))))
+            if not initial_estimate.exists(Ls[j]):
+                initial_estimate.insert(Ls[j], initial_estimate.atPose2(Xs[idx]).transformFrom(gtsam.Point2(d*np.cos(delta), d*np.sin(delta))))
+
+# utils.plot_trajectory(1, initial_estimate, label="initial")
+# utils.plot_landmarks(1, initial_estimate, Ls, label="initial")
+
+# plt.show()
+# exit()
 
 #------------ Optimization of Graph ---------------#
-initial_estimate = gtsam.Values()
-for pose_id, pose in zip(Xs, trajectory):
-    # initial_estimate.insert(pose_id, gtsam.Pose2(*pose))
-    initial_estimate.insert(pose_id, gtsam.Pose2(np.array(config.INITIAL_STATE)+0.05))
+# initial_estimate = gtsam.Values()
+# for pose_id, pose in zip(Xs, trajectory):
+#     # initial_estimate.insert(pose_id, gtsam.Pose2(*pose))
+#     initial_estimate.insert(pose_id, gtsam.Pose2(np.array(config.INITIAL_STATE)+0.05))
 
-for land_idx, pose in zip(Ls, landmarks):
-    # initial_estimate.insert(land_idx, pose)
-    initial_estimate.insert(land_idx, gtsam.Point2(np.array(config.INITIAL_STATE[:-1])+0.05))
+# for land_idx, pose in zip(Ls, landmarks):
+#     # initial_estimate.insert(land_idx, pose)
+#     initial_estimate.insert(land_idx, gtsam.Point2(np.array(config.INITIAL_STATE[:-1])+0.05))
 
 params = gtsam.LevenbergMarquardtParams()
 optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate, params)
