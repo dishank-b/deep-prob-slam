@@ -11,6 +11,8 @@ import warnings
 warnings.filterwarnings("ignore")
 wb.login()
 
+#=============Config=============#
+
 wb.init(
     # mode="disabled",
     project="deep-prob-slam",
@@ -37,9 +39,9 @@ wb.init(
 config = wb.config
 np.random.seed(config.seed)
 
-#---------Generating ground truth------------#
+#===============Generating ground truth===============#
 
-# Generating robot GT trajectory
+#---------Generating robot GT trajectory-------------#
 trajectory = [config.INITIAL_STATE]
 gt_odometry = []
 
@@ -62,15 +64,17 @@ trajectory = np.array(trajectory)
 # print(trajectory)
 # plt.plot(*zip(*trajectory[:,:-1]), marker = "o")
 
-# Generating landmarks
+#----------Generating landmarks-------------------#
 dim_field_max = int(np.max(trajectory[:, :-1]))
 dim_field_min = int(np.min(trajectory[:, :-1]))
 landmarks = []
 
+# one landmark randomly places in square of size SPACING*SPACING
 for x in range(dim_field_min, dim_field_max, config.SPACING):
     for y in range(dim_field_min, dim_field_max, config.SPACING):
         landmarks.append((np.random.uniform(x, x+config.SPACING), np.random.uniform(y, y+config.SPACING)))
 
+# selecting only the landmarks which is in range of robot
 mask = []
 for land_pose in landmarks:
     in_range = False
@@ -83,7 +87,9 @@ landmarks = np.array(landmarks)[mask]
 
 # plt.scatter(*zip(*landmarks), color="red")
 
-# -------- GT Plotting ---------# 
+#=================================================================================#
+
+# ==============GT Plotting ==============# 
 
 Xs = [X(i+1) for i in range(len(trajectory))]
 Ls = [L(i+1) for i in range(len(landmarks))]
@@ -97,13 +103,14 @@ for pose_id, pose in zip(Xs, trajectory):
 for land_idx, pose in zip(Ls, landmarks):
     gt.insert(land_idx, pose)
 
-# utils.plot_trajectory(0, gt, label="GT")
+
+utils.plot_trajectory(1, gt, label="GT")
 # utils.plot_landmarks(0, gt, Ls, label="GT")  
 
 # plt.savefig("{}_gt.png".format(run_id))
 # plt.clf()
 
-#--------- Solving SLAM --------- #
+#======================Solving SLAM ======================#
 
 PRIOR_NOISE = gtsam.noiseModel.Diagonal.Sigmas(np.array(config.PRIOR_NOISE))
 ODOMETRY_NOISE = gtsam.noiseModel.Diagonal.Sigmas(np.array(config.ODOMETRY_NOISE))
@@ -117,7 +124,7 @@ graph = gtsam.NonlinearFactorGraph()
 # inital guess of values for optimizer
 # initial_estimate = gtsam.Values()
 
-# Adding odometry factors and landmark measurement factors
+#---------Adding odometry factors and landmark measurement factors----------------#
 for idx, robo_pose in enumerate(trajectory):
     if idx==0:
         graph.add(gtsam.PriorFactorPose2(Xs[idx], gtsam.Pose2(*robo_pose), PRIOR_NOISE))
@@ -148,6 +155,7 @@ for idx, robo_pose in enumerate(trajectory):
             # if not initial_estimate.exists(Ls[j]):
                 # initial_estimate.insert(Ls[j], initial_estimate.atPose2(Xs[idx]).transformFrom(gtsam.Point2(d*np.cos(delta), d*np.sin(delta))))
 
+#------------ Optimization of Graph ---------------#
 initial_estimate = gtsam.Values()
 for pose_id, pose in zip(Xs, trajectory):
     # initial_estimate.insert(pose_id, gtsam.Pose2(*pose))
@@ -159,17 +167,17 @@ for land_idx, pose in zip(Ls, landmarks):
 
 params = gtsam.LevenbergMarquardtParams()
 optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate, params)
-result = optimizer.optimize()
 
-# Calculate and print marginal covariances for all variables
-marginals = gtsam.Marginals(graph, result)
+result = optimizer.optimize() # solution of graph
+marginals = gtsam.Marginals(graph, result) # Calculate and print marginal covariances for all variables
 
-utils.plot_trajectory(1, gt, label="GT")
 utils.plot_trajectory(1, result, marginals=marginals, label="Estimated")
 utils.plot_landmarks(1, result, Ls, marginals, label="Estimated")
 
 # plt.savefig("{}_estimated.png".format(run_id))
 
+
+# location of robot and landmarks with associated predicted covariance
 esti_trajectory = np.array([result.atPose2(key).translation() for key in Xs])
 esti_trajectory_covar = np.array([marginals.marginalCovariance(key) for key in Xs])
 esti_landmarks = np.array([result.atPoint2(key) for key in Ls])
@@ -177,10 +185,10 @@ esti_landmarks_covar = np.array([marginals.marginalCovariance(key) for key in Ls
 
 #------------ Evaluation ------------ #
 
-rmse_robo = np.array([np.linalg.norm(gt_robo_pose-esti_robo_pose) for gt_robo_pose, esti_robo_pose in zip(trajectory[:, :-1], esti_trajectory)]).mean() #ignoring orientation for MSE
+rmse_robo = np.array([np.linalg.norm(gt_robo_pose-esti_robo_pose) for gt_robo_pose, esti_robo_pose in zip(trajectory[:, :-1], esti_trajectory)]).mean() #ignoring orientation(theta) for RMSE
 mahalanobis_robo = np.array([mahalanobis(gt_robo_pose, esti_robo_pose, np.linalg.inv(covar)) for gt_robo_pose, esti_robo_pose, covar in zip(trajectory[:, :-1], esti_trajectory, esti_trajectory_covar[:, 0:2, 0:2])]).mean()
 
-rmse_landmarks = np.array([np.linalg.norm(gt_land_pose-esti_land_pose) for gt_land_pose, esti_land_pose in zip(landmarks, esti_landmarks)]).mean() #ignoring orientation for MSE
+rmse_landmarks = np.array([np.linalg.norm(gt_land_pose-esti_land_pose) for gt_land_pose, esti_land_pose in zip(landmarks, esti_landmarks)]).mean() #ignoring orientation(theta) for MSE
 mahalanobis_landmark = np.array([mahalanobis(gt_land_pose, esti_land_pose, np.linalg.inv(covar)) for gt_land_pose, esti_land_pose, covar in zip(landmarks, esti_landmarks, esti_landmarks_covar)]).mean()
 
 print("Robot Pose - RMSE: {}, Mean Mahalanobis: {}".format(rmse_robo, mahalanobis_robo))
