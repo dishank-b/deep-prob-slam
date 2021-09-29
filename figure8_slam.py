@@ -4,8 +4,10 @@ import matplotlib.pyplot as plt
 import gtsam.utils.plot as gtsam_plot
 import numpy as np
 from scipy.spatial.distance import mahalanobis
+from scipy.stats import multivariate_normal
 from wandb.sdk.lib import disabled
 import utils
+import eval_metrices as metrices
 import wandb as wb
 import warnings
 warnings.filterwarnings("ignore")
@@ -16,13 +18,15 @@ runs = 20
 
 for run_id in range(runs):
 
+    print("Run Id: {}".format(run_id))
+
     #=============Config=============#
 
     wb.init(
         # mode="disabled",
         project="toy-prob-slam",
         entity="deeprobslam",
-        group="overconf-odom-overconf-landmark",
+        group="calibrated",
         # group="calibrated",
         config = { 
         "run_id" : run_id,
@@ -41,7 +45,7 @@ for run_id in range(runs):
         "ODOMETRY_NOISE" : [0.1, 0.1, 2*np.pi/180.0],
         "MEASUREMENT_NOISE" : [2*np.pi/180.0, 0.1], # bearing (angle) noise, distance noise.
         "uncalib_ODOMETRY_NOISE" : [0.05, 0.05, np.pi/180.0],
-        "uncalib_MEASUREMENT_NOISE" : [np.pi/180.0, 0.05], # bearing (angle) noise, distance noise.
+        "uncalib_MEASUREMENT_NOISE" : [4*np.pi/180.0, 0.2], # bearing (angle) noise, distance noise.
         }
     )
 
@@ -116,7 +120,7 @@ for run_id in range(runs):
         gt.insert(land_idx, pose)
 
 
-    utils.plot_trajectory(1, gt, label="GT")
+    utils.plot_trajectory(2, gt, label="GT")
     # utils.plot_landmarks(0, gt, Ls, label="GT")  
 
     # plt.savefig("{}_gt.png".format(run_id))
@@ -151,8 +155,8 @@ for run_id in range(runs):
             odometry = np.array([d*np.cos(delta), d*np.sin(delta), diff[2]])
             odometry = np.random.multivariate_normal(odometry, ODOMETRY_NOISE.covariance())
             odometry = gtsam.Pose2(*odometry) # this odometry has to be wrt current robot frame, so directly taking different between two robot poses will give odom in ground frame. 
-            # graph.add(gtsam.BetweenFactorPose2(Xs[idx-1], Xs[idx], odometry, ODOMETRY_NOISE))
-            graph.add(gtsam.BetweenFactorPose2(Xs[idx-1], Xs[idx], odometry, uncalib_ODOMETRY_NOISE))
+            graph.add(gtsam.BetweenFactorPose2(Xs[idx-1], Xs[idx], odometry, ODOMETRY_NOISE))
+            # graph.add(gtsam.BetweenFactorPose2(Xs[idx-1], Xs[idx], odometry, uncalib_ODOMETRY_NOISE))
             initial_estimate.insert(Xs[idx], initial_estimate.atPose2(Xs[idx-1]).compose(odometry))
     
 
@@ -164,8 +168,8 @@ for run_id in range(runs):
                 # sampling
                 d = np.random.normal(d, MEASUREMENT_NOISE.sigmas()[1])
                 delta = np.random.normal(delta, MEASUREMENT_NOISE.sigmas()[0])
-                # graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, MEASUREMENT_NOISE))
-                graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, uncalib_MEASUREMENT_NOISE))
+                graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, MEASUREMENT_NOISE))
+                # graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, uncalib_MEASUREMENT_NOISE))
                 if not initial_estimate.exists(Ls[j]):
                     initial_estimate.insert(Ls[j], initial_estimate.atPose2(Xs[idx]).transformFrom(gtsam.Point2(d*np.cos(delta), d*np.sin(delta))))
 
@@ -188,30 +192,56 @@ for run_id in range(runs):
     result = optimizer.optimize() # solution of graph
     marginals = gtsam.Marginals(graph, result) # Calculate and print marginal covariances for all variables
 
-    utils.plot_trajectory(1, result, marginals=marginals, label="Estimated")
-    utils.plot_landmarks(1, result, Ls, marginals, label="Estimated")
+    utils.plot_trajectory(2, result, marginals=marginals, label="Estimated")
+    utils.plot_landmarks(2, result, Ls, marginals, label="Estimated")
 
     # plt.savefig("{}_estimated.png".format(run_id))
 
 
     # location of robot and landmarks with associated predicted covariance
-    esti_trajectory = np.array([result.atPose2(key).translation() for key in Xs])
+    esti_trajectory = np.array([np.concatenate((result.atPose2(key).translation(), np.array([result.atPose2(key).theta()]))) for key in Xs])
     esti_trajectory_covar = np.array([marginals.marginalCovariance(key) for key in Xs])
     esti_landmarks = np.array([result.atPoint2(key) for key in Ls])
     esti_landmarks_covar = np.array([marginals.marginalCovariance(key) for key in Ls])
 
+    # print(esti_trajectory, esti_trajectory_covar)
+
     #------------ Evaluation ------------ #
 
-    rmse_robo = np.array([np.linalg.norm(gt_robo_pose-esti_robo_pose) for gt_robo_pose, esti_robo_pose in zip(trajectory[:, :-1], esti_trajectory)]).mean() #ignoring orientation(theta) for RMSE
-    mahalanobis_robo = np.array([mahalanobis(gt_robo_pose, esti_robo_pose, np.linalg.inv(covar)) for gt_robo_pose, esti_robo_pose, covar in zip(trajectory[:, :-1], esti_trajectory, esti_trajectory_covar[:, 0:2, 0:2])]).mean()
+    rmse_robo = metrices.rmse(trajectory[:,:-1], esti_trajectory[:,:-1])
+    mahalanobis_robo = metrices.mahalanobis(trajectory[:,:-1], esti_trajectory[:,:-1], esti_trajectory_covar[:, 0:2, 0:2])
+    nll_robo = metrices.nll(trajectory[:,:-1], esti_trajectory[:,:-1], esti_trajectory_covar[:, 0:2, 0:2])
+    ece_robo = metrices.ece(trajectory[:,:-1], esti_trajectory[:,:-1], esti_trajectory_covar[:, 0:2, 0:2], plot=True)
+    ece_robo_full = metrices.ece(trajectory, esti_trajectory, esti_trajectory_covar)
 
-    rmse_landmarks = np.array([np.linalg.norm(gt_land_pose-esti_land_pose) for gt_land_pose, esti_land_pose in zip(landmarks, esti_landmarks)]).mean() #ignoring orientation(theta) for MSE
-    mahalanobis_landmark = np.array([mahalanobis(gt_land_pose, esti_land_pose, np.linalg.inv(covar)) for gt_land_pose, esti_land_pose, covar in zip(landmarks, esti_landmarks, esti_landmarks_covar)]).mean()
+    rmse_landmarks = metrices.rmse(landmarks, esti_landmarks)
+    mahalanobis_landmark = metrices.mahalanobis(landmarks, esti_landmarks, esti_landmarks_covar)
+    nll_landmark = metrices.nll(landmarks, esti_landmarks, esti_landmarks_covar)
+    ece_landmark = metrices.ece(landmarks, esti_landmarks, esti_landmarks_covar)
 
-    print("Robot Pose - RMSE: {}, Mean Mahalanobis: {}".format(rmse_robo, mahalanobis_robo))
-    print("Landmark Pose - RMSE: {}, Mean Mahalanobis: {}".format(rmse_landmarks, mahalanobis_landmark))
+    nll_odom = metrices.odom_nll(trajectory, esti_trajectory, uncalib_ODOMETRY_NOISE.covariance())
 
-    wb.log({"Rob Pose RMSE": rmse_robo, "Robo Mahalanobis": mahalanobis_robo , "Landmark Pose RMSE":rmse_landmarks, "Landmark Mahalanobis":mahalanobis_landmark, "Trajectory": wb.Image(plt)})
+    print("Robot Pose - RMSE: {}, Mean Mahalanobis: {}, Robo ECE: {}, Robo NLL: {}".format(rmse_robo, mahalanobis_robo, ece_robo, nll_robo))
+    print("Landmark Pose - RMSE: {}, Mean Mahalanobis: {}, ECE: {}, NLL: {} ".format(rmse_landmarks, mahalanobis_landmark, ece_landmark, nll_landmark))
+
+    wb.log({"Robo Poses": esti_trajectory,
+            "Landmark Poses" : esti_landmarks,
+            "Robo Poses Covar": esti_trajectory_covar,
+            "Landmark Poses Covar": esti_landmarks_covar,
+            "GT Robo poses": trajectory,
+            "GT Landmark poses": landmarks,
+            "Robo Pose RMSE": rmse_robo, 
+            "Robo Mahalanobis": mahalanobis_robo,
+            "Robo NLL" : nll_robo, 
+            "Robo ECE": ece_robo,
+            "Robo ECE full": ece_robo_full,
+            "Landmark Pose RMSE":rmse_landmarks, 
+            "Landmark Mahalanobis":mahalanobis_landmark, 
+            "Landmark NLL": nll_landmark,
+            "Landmark ECE": ece_landmark,
+            "Odom ECE": nll_odom,
+            "Trajectory": wb.Image(plt)}
+            )
 
     wb.finish()
 
