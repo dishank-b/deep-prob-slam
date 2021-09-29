@@ -8,6 +8,10 @@ import utils
 import warnings
 warnings.filterwarnings("ignore")
 
+"""
+File to implement landmark SLAM with toy dataset. 
+"""
+
 runs = 10 
 
 running_metrics = {"robo_rmse": [], "robo_maha":[], "land_rmse": [], "land_maha":[]}
@@ -120,8 +124,8 @@ for run_id in range(runs):
             odometry = np.array([d*np.cos(delta), d*np.sin(delta), diff[2]])
             odometry = np.random.multivariate_normal(odometry, ODOMETRY_NOISE.covariance())
             odometry = gtsam.Pose2(*odometry) # his odometry has to be wrt current robot frame, so directly taking different between two robot poses will give odom in ground frame. 
-            # graph.add(gtsam.BetweenFactorPose2(Xs[idx], Xs[idx+1], odometry, ODOMETRY_NOISE))
-            graph.add(gtsam.BetweenFactorPose2(Xs[idx], Xs[idx+1], odometry, uncalib_ODOMETRY_NOISE))
+            graph.add(gtsam.BetweenFactorPose2(Xs[idx], Xs[idx+1], odometry, ODOMETRY_NOISE))
+            # graph.add(gtsam.BetweenFactorPose2(Xs[idx], Xs[idx+1], odometry, uncalib_ODOMETRY_NOISE))
 
 
         for j, land_pose in enumerate(landmarks):
@@ -132,8 +136,8 @@ for run_id in range(runs):
             d = np.random.normal(d, MEASUREMENT_NOISE.sigmas()[1])
             delta = np.random.normal(delta, MEASUREMENT_NOISE.sigmas()[0])
             if d < SENSOR_RANGE:
-                # graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, MEASUREMENT_NOISE))
-                graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, uncalib_MEASUREMENT_NOISE))
+                graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, MEASUREMENT_NOISE))
+                # graph.add(gtsam.BearingRangeFactor2D(Xs[idx], Ls[j], gtsam.Rot2.fromAngle(delta), d, uncalib_MEASUREMENT_NOISE))
 
     # # Print graph
     # print("Factor Graph:\n{}".format(graph))

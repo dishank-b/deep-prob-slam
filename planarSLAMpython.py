@@ -6,6 +6,10 @@ import numpy as np
 from scipy.spatial.distance import mahalanobis
 import utils
 
+"""
+Implement the landmark slam given in exmaple which is in C++ in python. It uses the file example.txt 
+to load the dataset. 
+"""
 
 def make_graph(file_name, odometry_noise):
     graph = gtsam.NonlinearFactorGraph()
