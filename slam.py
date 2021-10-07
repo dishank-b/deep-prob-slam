@@ -1,7 +1,6 @@
 import gtsam
 from gtsam.symbol_shorthand import X, L
 import matplotlib.pyplot as plt
-import gtsam.utils.plot as gtsam_plot
 import numpy as np
 from scipy.spatial.distance import mahalanobis
 import utils
