@@ -9,9 +9,9 @@ from mpl_toolkits.mplot3d import Axes3D
 
 import numpy as np
 import pandas as pd
-import cv2
+# import cv2
 
-from rotations import Quaternion, skew_symmetric
+# from rotations import Quaternion, skew_symmetric
 
 def visualize_trajectory(trajectory, title = "Vehicle's trajectory"):
     """
@@ -524,3 +524,89 @@ def compare_3d_all(ground_truth, trajectory_vo, trajectory_vio, title):
 	ax.set_zlim(minZ, maxZ)
 	plt.tight_layout()
 	plt.show()
+
+def visualize_quadrics(poses, title="Quadric poses"):
+    """
+    Plot the vehicle's trajectory
+
+    :param trajectory: Numpy array (3 x M) where M is the number of samples
+        with the trayectory of the vehicle.
+    :param title: Name of the plot
+    """
+
+    # lists for x, y and z values
+    locX = list(poses[0,:])
+    locY = list(poses[1,:])
+    locZ = list(poses[2,:])
+    
+    # Axis limits
+    maxX = np.amax(locX) + 1
+    minX = np.amin(locX) - 1
+    maxY = np.amax(locY) + 1
+    minY = np.amin(locY) - 1 
+    maxZ = np.amax(locZ) + 1
+    minZ = np.amin(locZ) - 1
+
+    # Set styles
+    mpl.rc("figure", facecolor="white")
+    plt.style.use("seaborn-whitegrid")
+
+    # Plot the figure
+    fig = plt.figure(figsize=(8, 6), dpi=100)
+    gspec = gridspec.GridSpec(2, 2)
+    ZY_plt = plt.subplot(gspec[1,1])
+    YX_plt = plt.subplot(gspec[0,1])
+    ZX_plt = plt.subplot(gspec[1,0])
+    D3_plt = plt.subplot(gspec[0,0], projection='3d')
+    
+    toffset = 1.0
+    
+    # Actual trajectory plotting ZX
+    ZX_plt.set_title("Trajectory (X, Z)", y=toffset)
+    ZX_plt.scatter(locX, locZ, s=8, c="blue", label="Start location", zorder=2)
+    ZX_plt.set_xlabel("X [m]")
+    ZX_plt.set_ylabel("Z [m]")
+    # Plot vehicle initial location
+    ZX_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
+    ZX_plt.scatter(locX[-1], locZ[-1], s=8, c="red", label="End location", zorder=2)
+    ZX_plt.set_xlim([minX, maxX])
+    ZX_plt.set_ylim([minZ, maxZ])
+    ZX_plt.legend(bbox_to_anchor=(1.05, 1.0), loc=3, title="Legend", borderaxespad=0., fontsize="medium", frameon=True)
+        
+    # Plot ZY
+    ZY_plt.set_title("Trajectory (Y, Z)", y=toffset)
+    ZY_plt.set_xlabel("Y [m]")
+    ZY_plt.scatter(locY, locZ, s=8, c="blue", label="Start location", zorder=2)
+    ZY_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
+    ZY_plt.scatter(locY[-1], locZ[-1], s=8, c="red", label="End location", zorder=2)
+    ZY_plt.set_xlim([minY, maxY])
+    ZY_plt.set_ylim([minZ, maxZ])
+    
+    # Plot YX
+    YX_plt.set_title("Trajectory (Y X)", y=toffset)
+    YX_plt.set_ylabel("X [m]")
+    YX_plt.set_xlabel("Y [m]")
+    YX_plt.scatter(locY, locX, s=8, c="blue", label="Start location", zorder=2)
+    YX_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
+    YX_plt.scatter(locY[-1], locX[-1], s=8, c="red", label="End location", zorder=2)
+    YX_plt.set_xlim([minY, maxY])
+    YX_plt.set_ylim([minX, maxX])
+
+    # Plot 3D
+    D3_plt.set_title("3D trajectory", y = 1.1)
+    D3_plt.scatter(xs = locX, ys = locY, zs = locZ, zorder=0)
+    D3_plt.scatter(0, 0, 0, s=8, c="green", zorder=1)
+    D3_plt.scatter(locX[-1], locY[-1], locZ[-1], s=8, c="red", zorder=1)
+    D3_plt.set_xlim3d(minX, maxX)
+    D3_plt.set_ylim3d(minY, maxY)
+    D3_plt.set_zlim3d(minZ, maxZ)
+    D3_plt.tick_params(direction='out', pad=-2)
+    D3_plt.set_xlabel("X [m]", labelpad=0)
+    D3_plt.set_ylabel("Y [m]", labelpad=0)
+    D3_plt.set_zlabel("Z [m]", labelpad=-5)
+    
+    # Plotting the result
+    fig.suptitle(title, fontsize=16, y = 1.05)
+    D3_plt.view_init(35, azim=45)
+    plt.tight_layout()
+    plt.show()

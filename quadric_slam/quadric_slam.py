@@ -1,17 +1,35 @@
 import numpy as np
 import matplotlib.pyplot as plt
+from numpy.lib.type_check import imag
 import yaml
 import glob
+import cv2
 
 import gtsam 
 from gtsam.symbol_shorthand import X, L
 import gtsam_quadrics as gtquadric
 import visualization
+import drawing
 
 from instances import Instances
 
+import warnings
+warnings.filterwarnings("ignore")
+
 
 def get_data(dir):
+    """
+    Read the data provided. 
+    Instance - Class to handle each frame and it's associated attributes
+    instance.pose - Camera pose wrt world coordinates
+    instance.image_key - id for the frame
+    instance.object_key - [K] ids of N object detected in the frame
+    instance.bbox - [K,4] bouding boxes of N object detected in the frame
+    instance.path - path of rgb image in the data directory
+
+    Returns:
+    instance_list - [Instance] - N instances. 
+    """
     file_names = glob.glob(dir+"*.json")
     instance_list = []
     
@@ -27,98 +45,242 @@ def get_data(dir):
     return instance_list
 
 
-def initialize_quadric(bbox, camera_pose, camera_intrinsics):
-    planes = []
-    for i in range(bbox.lines().size()):
-        planes.append(gtquadric.QuadricCamera.transformToImage(camera_pose, camera_intrinsics).transpose()@bbox.lines().at(i))
-    A = []
-    for plane in planes:
-        a = plane[..., None]*np.ones((len(plane), len(plane)))*plane
-        A.append(a)
-    for i in range(len(A)):
-        a = A[i]
-        a = np.triu(2*a)-np.diag(np.diag(a))
-        A[i] = a[np.triu_indices(len(a))]
-    A = np.array(A)
-    _, _, VT = np.linalg.svd(A)
-    q = VT.T[:,-1]
-    Q = np.zeros((4,4))
-    Q[np.triu_indices(4)] = q
-    Q = Q+Q.T-np.diag(np.diag(Q))
-    
-    return gtquadric.ConstrainedDualQuadric(Q)
+class SLAM(object):
+    """
+    Class for solve the object slam system 
+    """
+    def __init__(self, instances, intrinsics, prior_sigma, odom_sigma, bbox_sigma) -> None:
+        super().__init__()
+        self.graph = self._init_graph()
+        self.initial_estimate = gtsam.Values()
+        self.results = None
+        self.calibration = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
+        self.cam_ids = []
+        self.bbox_ids = []
+        self.prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([prior_sigma]*6, dtype=float))
+        self.odometry_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([odom_sigma]*3 + [odom_sigma]*3, dtype=float))
+        self.bbox_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([bbox_sigma]*4, dtype=float))
+        self.instances = instances
 
-ODOM_SIGMA = 0.01
-BOX_SIGMA = 3
+    def _init_graph(self):
+        """
+        Initialize the graph
+        TODO: add an argument to chose which type of graph to use
+        """
+        return gtsam.NonlinearFactorGraph()
 
-instances = get_data("./data/preprocessed/")
+    def _initialize_quadric(self, bbox, camera_pose, camera_intrinsics):
+        """
+        Calculate q given one boudning box and camera pose. 
+        Solves for Aq = 0. Where A formed using one bouding box from the the image. 
+        Rank of A (4) is less than number of variables in q (10) to solve properly/
+        Hence underdeterminent system. 
+        """
+        planes = []
+        
+        for i in range(bbox.lines().size()):
+            planes.append(gtquadric.QuadricCamera.transformToImage(camera_pose, camera_intrinsics).transpose()@bbox.lines().at(i))
+        A = []
+        
+        for plane in planes:
+            a = plane[..., None]*np.ones((len(plane), len(plane)))*plane
+            A.append(a)
+        
+        for i in range(len(A)):
+            a = A[i]
+            a = np.triu(2*a)-np.diag(np.diag(a))
+            A[i] = a[np.triu_indices(len(a))]
+        
+        A = np.array(A)
+        
+        return A
 
-#get data
-file = open("./data/calibration.yaml", 'r')
-intrinsics  = yaml.load(file)
+    def _init_quad_multi_frames(self, bboxes, camera_poses, camera_intrinsics):
+        """
+        Calculate quadric q given boudning box measurement over multiple frames and
+        respective camera poses. 
+        Solves for Aq = 0. Where A formed using one bouding box from the the image. 
+        Rank of A (4) is less than number of variables in q (10) to solve properly/
+        Hence underdeterminent system. 
 
-# Xs = [X(i) for i in range(len(poses))]
-# Ls = [L(i) for i in range(len(boundingboxes))]
+        Refer to Eq. 9 in the paper
+        """
+        A = []
+        
+        for box, camera_pose in zip(bboxes, camera_poses):
+            A.append(self._initialize_quadric(gtquadric.AlignedBox2(*box), camera_pose, camera_intrinsics))
 
-#Make the graph
-calibration = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
-graph = gtsam.NonlinearFactorGraph()
-initial_estimate = gtsam.Values()
+        A = np.concatenate(A)
+        
+        _, _, VT = np.linalg.svd(A)
+        q = VT.T[:,-1]
+        Q = np.zeros((4,4))
+        Q[np.triu_indices(4)] = q
+        Q = Q+Q.T-np.diag(np.diag(Q))
+        
+        return gtquadric.ConstrainedDualQuadric(Q)
+
+    def _init_quadrics(self):
+        """
+        Initialize the quadrics
+        """
+        obj_dict = {}
+        
+        for instance in self.instances:
+            for obj_id, box in zip(instance.object_key, instance.bbox):
+                if obj_id not in obj_dict:
+                    obj_dict[obj_id] = [[box, instance.pose]]
+                else:
+                    obj_dict[obj_id].append([box, instance.pose])
+
+        self.bbox_ids = sorted(list(obj_dict.keys()))
+        
+        for obj_id, box_cam_pair in obj_dict.items():
+            quadric = self._init_quad_multi_frames(*zip(*box_cam_pair), self.calibration)
+            quadric.addToValues(self.initial_estimate, L(obj_id))
+
+    def make_graph(self):
+        """
+        Make the factor graph to be solved.
+        Data association is assumed to be solved for this. 
+        No incremental solving. Joint optimizaition for all the camera poses and object poses at once. 
+
+        Uses grounth truth odometry as the odometry measurements. 
+        """
+        for i, instance in enumerate(self.instances):
+            image_key = instance.image_key
+            self.cam_ids.append(image_key)
+            if i==0:
+                self.graph.add(gtsam.PriorFactorPose3(X(image_key), instance.pose, self.prior_noise))
+                self.initial_estimate.insert(X(image_key), gtsam.Pose3(instance.pose))
+            
+            if i < len(self.instances)-1:
+                relative_pose = instance.pose.between(self.instances[i+1].pose)
+                # TODO: add noise to relative pose
+                odometry_factor = gtsam.BetweenFactorPose3(X(image_key), X(self.instances[i+1].image_key), relative_pose, self.odometry_noise)
+                self.graph.add(odometry_factor)
+                self.initial_estimate.insert(X(self.instances[i+1].image_key), self.initial_estimate.atPose3(X(image_key)).compose(relative_pose))
+
+            for obj_id, bbox in zip(instance.object_key, instance.bbox):
+                box = gtquadric.AlignedBox2(*bbox)
+                bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(image_key), L(obj_id), self.bbox_noise)
+                self.graph.add(bbf)
+                # if not self.initial_estimate.exists(L(obj_id)):
+                #     self.obj_poses_key.append(obj_id)
+                #     quadric = initialize_quadric(box, self.initial_estimate.atPose3(X(image_key)), self.calibration)
+                #     # quadric = gtquadric.ConstrainedDualQuadric()
+                #     quadric.addToValues(self.initial_estimate, L(obj_id))
+
+        self._init_quadrics()
+
+    def solve(self):
+        """
+        Optimization of factor graph
+        """
+        # define lm parameters
+        parameters = gtsam.LevenbergMarquardtParams()
+        parameters.setVerbosityLM("SILENT") # SILENT = 0, SUMMARY, TERMINATION, LAMBDA, TRYLAMBDA, TRYCONFIG, DAMPED, TRYDELTA : VALUES, ERROR 
+        parameters.setMaxIterations(100)
+        parameters.setlambdaInitial(1e-5)
+        parameters.setlambdaUpperBound(1e30)
+        parameters.setlambdaLowerBound(1e-8)
+        parameters.setRelativeErrorTol(1e-5)
+        parameters.setAbsoluteErrorTol(1e-5)
+
+        # create optimizer
+        optimizer = gtsam.LevenbergMarquardtOptimizer(self.graph, self.initial_estimate, parameters)
+
+        # run optimizer
+        self.results = optimizer.optimize()
+
+    def visualize_initial(self):
+        """
+        Visualizing the initial estimate of quadrics and trajectory
+        """
+
+        video=cv2.VideoWriter('init.avi',cv2.VideoWriter_fourcc(*'MJPG'),30,(640,480))
+        for instance in self.instances:
+            image_path = instance.image_path
+            image_path = "/".join(["data"] + image_path.split('/')[-2:])
+            image = cv2.imread(image_path)
+            draw_gt = drawing.CV2Drawing(image)
+            for obj_id, bbox in zip(instance.object_key, instance.bbox):
+                box = gtquadric.AlignedBox2(*bbox)
+                quadric = gtquadric.ConstrainedDualQuadric.getFromValues(self.initial_estimate, L(obj_id))
+                draw_gt.quadric(instance.pose, quadric, self.calibration, (255,0,255))
+                draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255,0,255))
+            # cv2.imwrite("init/"+image_path.split("/")[-1], image)
+            # cv2.imshow("image", image)
+            video.write(image)
+            # cv2.waitKey(1)
+        video.release()
+
+        cam_poses = np.array([self.initial_estimate.atPose3(X(i)).translation() for i in self.cam_ids]).T
+        visualization.visualize_trajectory(cam_poses)
+
+        object_poses = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(self.initial_estimate, L(key)).centroid() for key in self.bbox_ids]).T
+        visualization.visualize_quadrics(object_poses)
 
 
-# define noise models
-prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([1e-1]*6, dtype=float))
-odometry_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([ODOM_SIGMA]*3 + [ODOM_SIGMA]*3, dtype=float))
-bbox_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([BOX_SIGMA]*4, dtype=float))
+    def visualize_result(self):
+        """
+        Visualizing the solved estimate of quadrics and trajectory
+        """
+        video=cv2.VideoWriter('results.avi',cv2.VideoWriter_fourcc(*'MJPG'),30,(640,480))
+        for instance in self.instances:
+            image_path = instance.image_path
+            image_path = "/".join(["data"] + image_path.split('/')[-2:])
+            image = cv2.imread(image_path)
+            draw_gt = drawing.CV2Drawing(image)
+            for obj_id, bbox in zip(instance.object_key, instance.bbox):
+                box = gtquadric.AlignedBox2(*bbox)
+                quadric = gtquadric.ConstrainedDualQuadric.getFromValues(self.results, L(obj_id))
+                draw_gt.quadric(instance.pose, quadric, self.calibration, (255,0,255))
+                draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255,0,255))
+            # cv2.imwrite("init/"+image_path.split("/")[-1], image)
+            # cv2.imshow("image", image)
+            video.write(image)
+            # cv2.waitKey(1)
+        video.release()
 
-#Making the graph
-for i, instance in enumerate(instances):
-    if i==0:
-        graph.add(gtsam.PriorFactorPose3(X(instance.image_key), instance.pose, prior_noise))
-        initial_estimate.insert(X(instance.image_key), gtsam.Pose3(instance.pose))
-    
-    if i < len(instances)-1:
-        relative_pose = instance.pose.between(instances[i+1].pose)
-        # TODO: add noise to relative pose
-        odometry_factor = gtsam.BetweenFactorPose3(X(instance.image_key), X(instances[i+1].image_key), relative_pose, odometry_noise)
-        graph.add(odometry_factor)
-        initial_estimate.insert(X(instances[i+1].image_key), initial_estimate.atPose3(X(instance.image_key)).compose(relative_pose))
+        cam_poses = np.array([self.results.atPose3(X(i)).translation() for i in self.cam_ids]).T
+        visualization.visualize_trajectory(cam_poses)
 
-    for obj_id, bbox in zip(instance.object_key, instance.bbox):
-        box = gtquadric.AlignedBox2(*bbox)
-        bbf = gtquadric.BoundingBoxFactor(box, calibration, X(instance.image_key), L(obj_id), bbox_noise)
-        graph.add(bbf)
-        if not initial_estimate.exists(L(obj_id)):
-            quadric = initialize_quadric(box, initial_estimate.atPose3(X(instance.image_key)), calibration)
-            # quadric = gtquadric.ConstrainedDualQuadric()
-            quadric.addToValues(initial_estimate, L(obj_id))
+        object_poses = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(self.results, L(key)).centroid() for key in self.bbox_ids]).T
+        visualization.visualize_quadrics(object_poses)
 
-# print(initial_estimate)
-# exit()
-# print(graph)
+    def evaluate(self):
+        """
+        Evaluation metrices 
+        """
+        gt_list = [instance.pose.translation() for instance in self.instances]
+        esti_list = [self.results.atPose3(X(instance.image_key)).translation() for instance in self.instances]
 
-# define lm parameters
-parameters = gtsam.LevenbergMarquardtParams()
-parameters.setVerbosityLM("SUMMARY") # SILENT = 0, SUMMARY, TERMINATION, LAMBDA, TRYLAMBDA, TRYCONFIG, DAMPED, TRYDELTA : VALUES, ERROR 
-parameters.setMaxIterations(100)
-parameters.setlambdaInitial(1e-5)
-parameters.setlambdaUpperBound(1e30)
-parameters.setlambdaLowerBound(1e-8)
-parameters.setRelativeErrorTol(1e-5)
-parameters.setAbsoluteErrorTol(1e-5)
-
-# create optimizer
-optimizer = gtsam.LevenbergMarquardtOptimizer(graph, initial_estimate, parameters)
-
-# run optimizer
-result = optimizer.optimize()
-
-gt_list = [instance.pose.translation() for instance in instances]
-esti_list = [result.atPose3(X(instance.image_key)).translation() for instance in instances]
-
-print("RMSE: ", np.array([np.linalg.norm(gt_pose-esti_pose) for gt_pose, esti_pose in zip(gt_list, esti_list)]).mean())
+        print("RMSE: ", np.array([np.linalg.norm(gt_pose-esti_pose) for gt_pose, esti_pose in zip(gt_list, esti_list)]).mean())
 
 
+def main():
+    PRIOR_SIGMA = 1e-1
+    ODOM_SIGMA = 0.1
+    BOX_SIGMA = 5
+
+
+    #get data
+    instances = get_data("./data/preprocessed/")
+    file = open("./data/calibration.yaml", 'r')
+    intrinsics  = yaml.load(file)
+
+    print("-------DATA LOADED--------------")
+
+    slam = SLAM(instances, intrinsics, PRIOR_SIGMA, ODOM_SIGMA, BOX_SIGMA)
+    slam.make_graph()
+    slam.solve()
+    # slam.visualize_initial()
+    # slam.visualize_result()
+    slam.evaluate()
+
+if __name__ == "__main__":
+    main()
 
 
 
