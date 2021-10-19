@@ -57,9 +57,9 @@ class SLAM(object):
         self.calibration = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
         self.cam_ids = []
         self.bbox_ids = []
-        self.prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([prior_sigma]*6, dtype=float))
-        self.odometry_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([odom_sigma]*3 + [odom_sigma]*3, dtype=float))
-        self.bbox_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([bbox_sigma]*4, dtype=float))
+        self.prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(prior_sigma, dtype=float))
+        self.odometry_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(odom_sigma, dtype=float))
+        self.bbox_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(bbox_sigma, dtype=float))
         self.instances = instances
 
     def _init_graph(self):
@@ -253,17 +253,20 @@ class SLAM(object):
         """
         Evaluation metrices 
         """
-        gt_list = [instance.pose.translation() for instance in self.instances]
-        esti_list = [self.results.atPose3(X(instance.image_key)).translation() for instance in self.instances]
+        gt_cam = [instance.pose.translation() for instance in self.instances]
+        esti_cam = [self.results.atPose3(X(instance.image_key)).translation() for instance in self.instances]
 
-        print("RMSE: ", np.array([np.linalg.norm(gt_pose-esti_pose) for gt_pose, esti_pose in zip(gt_list, esti_list)]).mean())
+        init_quad = [gtquadric.ConstrainedDualQuadric.getFromValues(self.initial_estimate, L(obj_id)).centroid() for obj_id in self.bbox_ids]
+        esti_quad = [gtquadric.ConstrainedDualQuadric.getFromValues(self.results, L(obj_id)).centroid() for obj_id in self.bbox_ids]
+
+        print("Cam pose RMSE: ", np.array([np.linalg.norm(gt_pose-esti_pose) for gt_pose, esti_pose in zip(gt_cam, esti_cam)]).mean())
+        print("Quadrics RMSE: ", np.array([np.linalg.norm(gt_pose-esti_pose) for gt_pose, esti_pose in zip(init_quad, esti_quad)]).mean())
 
 
 def main():
-    PRIOR_SIGMA = 1e-1
-    ODOM_SIGMA = 0.1
-    BOX_SIGMA = 5
-
+    PRIOR_SIGMA = [2*np.pi/180, 2*np.pi/180, 2*np.pi/180, 1e-3, 1e-3, 1e-3]
+    ODOM_SIGMA = [2*np.pi/180, 2*np.pi/180, 2*np.pi/180, 0.05, 0.05, 0.05]
+    BOX_SIGMA = [10]*4
 
     #get data
     instances = get_data("./data/preprocessed/")
