@@ -183,37 +183,6 @@ def visualize_angles(rotations, title = "Vehicle's euler angles"):
     plt.tight_layout()
     plt.show()
 
-def visualize_camera_movement(image1, image1_points, image2, image2_points, is_show_img_after_move=False):
-    """
-    Plot the camera movement between two consecutive image frames
-
-    :param image1: First image at time stamp t
-    :param image1_points: Feature vector for the first image
-    :param image2: First image at time stamp t + 1
-    :param image2_points: Feature vectir for the second image
-    :param is_show_img_after_move: Bool variable to plot movement or not
-    """
-    image1 = image1.copy()
-    image2 = image2.copy()
-    
-    for i in range(0, len(image1_points)):
-        # Coordinates of a point on t frame
-        p1 = (int(image1_points[i][0]), int(image1_points[i][1]))
-        # Coordinates of the same point on t+1 frame
-        p2 = (int(image2_points[i][0]), int(image2_points[i][1]))
-
-        cv2.circle(image1, p1, 5, (0, 255, 0), 1)
-        cv2.arrowedLine(image1, p1, p2, (0, 255, 0), 1)
-        cv2.circle(image1, p2, 5, (255, 0, 0), 1)
-
-        if is_show_img_after_move:
-            cv2.circle(image2, p2, 5, (255, 0, 0), 1)
-    
-    if is_show_img_after_move: 
-        return image2
-    else:
-        return image1
-
 def compare_3d(ground_truth, trajectory, title):
 	"""
 	Plot the vehicle's trajectory in 3D space
@@ -524,6 +493,40 @@ def compare_3d_all(ground_truth, trajectory_vo, trajectory_vio, title):
 	ax.set_zlim(minZ, maxZ)
 	plt.tight_layout()
 	plt.show()
+
+def compare_quadrics(gt, estimated, title = "quadrics poses"):
+    """
+    Plot the quadrics in 3D space
+
+    :param gt: Numpy array (3 x M) where M is the number of quadrics
+        with the ground truth 
+    :param estimated: Numpy array (3 x M) where M is the number of quadrics
+        with the estimated. 
+    :param title: Name of the plot
+    """
+
+    # Axis limits
+    maxX = np.amax(estimated[0,:]) + 5
+    minX = np.amin(estimated[0,:]) - 5
+    maxY = np.amax(estimated[1,:]) + 5
+    minY = np.amin(estimated[1,:]) - 5 
+    maxZ = np.amax(estimated[2,:]) + 5
+    minZ = np.amin(estimated[2,:]) - 5
+
+    est_traj_fig = plt.figure()
+    ax = est_traj_fig.add_subplot(111, projection='3d')
+    ax.scatter(gt[0,:], gt[1,:], gt[2,:], c="blue", zorder=0)
+    ax.scatter(estimated[0,:], estimated[1,:], estimated[2,:], c="green", zorder=0)
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Y [m]')
+    ax.set_zlabel('Z [m]')
+    ax.set_title(title, y = 1.0)
+    ax.legend()
+    ax.set_xlim(minX, maxX)
+    ax.set_ylim(minY, maxY)
+    ax.set_zlim(minZ, maxZ)
+    plt.tight_layout()
+    plt.show()
 
 def visualize_quadrics(poses, title="Quadric poses"):
     """

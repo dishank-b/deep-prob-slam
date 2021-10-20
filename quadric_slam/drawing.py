@@ -20,13 +20,75 @@ from matplotlib.lines import Line2D
 
 # import gtsam and extension
 import gtsam
-import gtsam_quadrics
+from gtsam.symbol_shorthand import X, L
+import gtsam_quadrics as gtquadric
+import visualization
+
 
 # modify system path so file will work when run directly or as a module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
 # import custom python modules
 sys.dont_write_bytecode = True
+
+
+class Visualizer(object):
+    def __init__(self, cam_id, obj_id, calibration) -> None:
+        super().__init__()
+        self.cam_ids = cam_id
+        self.bbox_ids = obj_id
+        self.calibration = calibration
+
+    def visualize(self, instances, values, save_video=False, video_name="video"):
+        """
+        Visualizing the value estimate of quadrics and trajectory
+        """
+        if save_video:
+            video=cv2.VideoWriter(video_name+'.avi',cv2.VideoWriter_fourcc(*'MJPG'),30,(640,480))
+            for instance in instances:
+                image_path = instance.image_path
+                image_path = "/".join(["data"] + image_path.split('/')[-2:])
+                image = cv2.imread(image_path)
+                draw_gt = CV2Drawing(image)
+                for obj_id, bbox in zip(instance.object_key, instance.bbox):
+                    box = gtquadric.AlignedBox2(*bbox)
+                    quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, L(obj_id))
+                    draw_gt.quadric(instance.pose, quadric, self.calibration, (255,0,255))
+                    draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255,0,255))
+                video.write(image)
+            video.release()
+
+        else:
+            for instance in instances:
+                image_path = instance.image_path
+                image_path = "/".join(["data"] + image_path.split('/')[-2:])
+                image = cv2.imread(image_path)
+                draw_gt = CV2Drawing(image)
+                for obj_id, bbox in zip(instance.object_key, instance.bbox):
+                    box = gtquadric.AlignedBox2(*bbox)
+                    quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, L(obj_id))
+                    draw_gt.quadric(instance.pose, quadric, self.calibration, (255,0,255))
+                    draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255,0,255))
+                cv2.imshow("image", image)
+                cv2.waitKey(0.33)
+
+    def plot(self, gt, results):
+        gt_cam = np.array([gt.atPose3(X(id)).translation() for id in self.cam_ids]).T
+        esti_cam = np.array([results.atPose3(X(id)).translation() for id in self.cam_ids]).T
+
+        init_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(gt, L(id)).centroid() for id in self.bbox_ids]).T
+        esti_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(results, L(id)).centroid() for id in self.bbox_ids]).T
+        
+        visualization.compare_3d(gt_cam, esti_cam, "trajectory")
+        visualization.compare_quadrics(init_quad, esti_quad, "Quadrics")
+        
+        # visualization.visualize_trajectory(cam_poses)
+        # visualization.visualize_quadrics(object_poses)
+
+
+
+
+
 
 class CV2Drawing(object):
     def __init__(self, image):
