@@ -1,6 +1,5 @@
 import numpy as np
 import glob
-from torch.serialization import PROTOCOL_VERSION
 import yaml
 import torch
 import gtsam
@@ -56,8 +55,6 @@ def tum_uncertainty(path):
         instance_list.append(instance)
 
     instance_list.sort(key = lambda x: int(x.image_key))
-
-    # print(repr(instance_list[0]))
     
     return instance_list
 
