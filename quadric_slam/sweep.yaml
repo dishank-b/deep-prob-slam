@@ -1,0 +1,9 @@
+program: quadric_slam.py
+method: grid
+parameters:
+  odom_sigma:
+    values: [[2, 0.01],[5, 0.05],[10, 0.1],[15, 0.2]]
+  bbox_sigma:
+    values: [1, 2, 5, 10, 20, 50, 70, 100]
+project: quadric_slam
+entity: deeprobslam

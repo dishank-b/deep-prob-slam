@@ -44,7 +44,7 @@ class Visualizer(object):
         Visualizing the value estimate of quadrics and trajectory
         """
         if save_video:
-            video=cv2.VideoWriter(video_name+'.avi',cv2.VideoWriter_fourcc(*'MJPG'),30,(640,480))
+            video=cv2.VideoWriter(video_name+'.avi', cv2.VideoWriter_fourcc(*'MJPG'), 60, (640,480))
             for instance in instances:
                 image_path = instance.image_path
                 image_path = "/".join(["data"] + image_path.split('/')[-2:])
@@ -67,23 +67,29 @@ class Visualizer(object):
                 for obj_id, bbox in zip(instance.object_key, instance.bbox):
                     box = gtquadric.AlignedBox2(*bbox)
                     quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, L(obj_id))
-                    draw_gt.quadric(instance.pose, quadric, self.calibration, (255,0,255))
+                    draw_gt.quadric(values.atPose3(X(instance.image_key)), quadric, self.calibration, (255,0,255))
                     draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255,0,255))
                 cv2.imshow("image", image)
-                cv2.waitKey(0.33)
+                cv2.waitKey(1)
 
-    def plot(self, gt, results):
+    def plot(self, gt, results, compare=True):
         gt_cam = np.array([gt.atPose3(X(id)).translation() for id in self.cam_ids]).T
         esti_cam = np.array([results.atPose3(X(id)).translation() for id in self.cam_ids]).T
 
         init_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(gt, L(id)).centroid() for id in self.bbox_ids]).T
         esti_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(results, L(id)).centroid() for id in self.bbox_ids]).T
+
+        if compare:
+            trajectory = visualization.compare_3d(gt_cam, esti_cam, "trajectory")
+            quads = visualization.compare_quadrics(init_quad, esti_quad, "Quadrics")
+        else:
+            gt_trajectory = visualization.visualize_trajectory(gt_cam)
+            esti_trajectory = visualization.visualize_trajectory(esti_cam)
+
+            gt_quad = visualization.visualize_quadrics(init_quad)
+            esti_quad = visualization.visualize_quadrics(esti_quad)
         
-        visualization.compare_3d(gt_cam, esti_cam, "trajectory")
-        visualization.compare_quadrics(init_quad, esti_quad, "Quadrics")
-        
-        # visualization.visualize_trajectory(cam_poses)
-        # visualization.visualize_quadrics(object_poses)
+        return {"Cam Trajectory": trajectory, "Quadrics pose": quads}
 
 
 
@@ -138,7 +144,7 @@ class CV2Drawing(object):
         if quadric.isBehind(pose):
             return
         
-        image_box = gtsam_quadrics.AlignedBox2(0,0,self.image_width, self.image_height)
+        image_box = gtquadric.AlignedBox2(0,0,self.image_width, self.image_height)
         points_2D = self.generate_uv_spherical(quadric, pose, calibration, 20, 20)
         points_2D = np.round(points_2D).astype('int')
         # color = (0,0,255)
@@ -183,7 +189,7 @@ class CV2Drawing(object):
         points = np.stack((x,y,z))
 
         points_2D = np.zeros((points.shape[1], points.shape[2], 2))
-        transform_to_image = gtsam_quadrics.QuadricCamera.transformToImage(pose, calibration)
+        transform_to_image = gtquadric.QuadricCamera.transformToImage(pose, calibration)
 
         # warp points to quadric (3D) and project to image (2D)
         for i in range(points.shape[1]):

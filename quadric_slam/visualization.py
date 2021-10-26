@@ -99,6 +99,8 @@ def visualize_trajectory(trajectory, title = "Vehicle's trajectory"):
     plt.tight_layout()
     plt.show()
 
+    return fig
+
 def visualize_angles(rotations, title = "Vehicle's euler angles"):
     """
     Plot the vehicle's orientation (Euler angles)
@@ -184,38 +186,40 @@ def visualize_angles(rotations, title = "Vehicle's euler angles"):
     plt.show()
 
 def compare_3d(ground_truth, trajectory, title):
-	"""
-	Plot the vehicle's trajectory in 3D space
+    """
+    Plot the vehicle's trajectory in 3D space
 
-	:param ground_truth: Numpy array (3 x M) where M is the number of samples
-	    with the ground truth trayectory of the vehicle.
-	:param trajectory: Numpy array (3 x M) where M is the number of samples
-	    with the estimated trajectory of the vehicle.
-	:param title: Name of the plot
-	"""
+    :param ground_truth: Numpy array (3 x M) where M is the number of samples
+        with the ground truth trayectory of the vehicle.
+    :param trajectory: Numpy array (3 x M) where M is the number of samples
+        with the estimated trajectory of the vehicle.
+    :param title: Name of the plot
+    """
 
-	# Axis limits
-	maxX = np.amax(trajectory[0,:]) + 5
-	minX = np.amin(trajectory[0,:]) - 5
-	maxY = np.amax(trajectory[1,:]) + 5
-	minY = np.amin(trajectory[1,:]) - 5 
-	maxZ = np.amax(trajectory[2,:]) + 5
-	minZ = np.amin(trajectory[2,:]) - 5
+    # Axis limits
+    maxX = np.amax(trajectory[0,:]) + 5
+    minX = np.amin(trajectory[0,:]) - 5
+    maxY = np.amax(trajectory[1,:]) + 5
+    minY = np.amin(trajectory[1,:]) - 5 
+    maxZ = np.amax(trajectory[2,:]) + 5
+    minZ = np.amin(trajectory[2,:]) - 5
 
-	est_traj_fig = plt.figure()
-	ax = est_traj_fig.add_subplot(111, projection='3d')
-	ax.plot(ground_truth[0,:], ground_truth[1,:], ground_truth[2,:], "-", label='Ground Truth')
-	ax.plot(trajectory[0,:], trajectory[1,:], trajectory[2,:], "-", label='Estimated')
-	ax.set_xlabel('X [m]')
-	ax.set_ylabel('Y [m]')
-	ax.set_zlabel('Z [m]')
-	ax.set_title(title, y = 1.0)
-	ax.legend()
-	ax.set_xlim(minX, maxX)
-	ax.set_ylim(minY, maxY)
-	ax.set_zlim(minZ, maxZ)
-	plt.tight_layout()
-	plt.show()
+    est_traj_fig = plt.figure()
+    ax = est_traj_fig.add_subplot(111, projection='3d')
+    ax.plot(ground_truth[0,:], ground_truth[1,:], ground_truth[2,:], "-", label='Ground Truth')
+    ax.plot(trajectory[0,:], trajectory[1,:], trajectory[2,:], "-", label='Estimated')
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Y [m]')
+    ax.set_zlabel('Z [m]')
+    ax.set_title(title, y = 1.0)
+    ax.legend()
+    ax.set_xlim(minX, maxX)
+    ax.set_ylim(minY, maxY)
+    ax.set_zlim(minZ, maxZ)
+    plt.tight_layout()
+    plt.show()
+    
+    return est_traj_fig
 
 def compare_2d_trajectory(ground_truth, trajectory, title = "VO vs Ground Truth Trajectory"):
     """
@@ -458,41 +462,41 @@ def compare_2d_angles(ground_truth, rotations, title = "VO vs Ground Truth angle
     plt.show()
 
 def compare_3d_all(ground_truth, trajectory_vo, trajectory_vio, title):
-	"""
-	Plot the vehicle's trajectory in 3D space for the ground truth, VO and VIO estimates
+    """
+    Plot the vehicle's trajectory in 3D space for the ground truth, VO and VIO estimates
 
-	:param ground_truth: Numpy array (3 x M) where M is the number of samples
-	    with the ground truth trayectory of the vehicle.
-	:param trajectory_vo: Numpy array (3 x M) where M is the number of samples
-	    with the estimated VO trajectory of the vehicle.
-	:param trajectory_vio: Numpy array (3 x M) where M is the number of samples
-	    with the estimated VIO trajectory of the vehicle.
-	:param title: Name of the plot
-	"""
+    :param ground_truth: Numpy array (3 x M) where M is the number of samples
+        with the ground truth trayectory of the vehicle.
+    :param trajectory_vo: Numpy array (3 x M) where M is the number of samples
+        with the estimated VO trajectory of the vehicle.
+    :param trajectory_vio: Numpy array (3 x M) where M is the number of samples
+        with the estimated VIO trajectory of the vehicle.
+    :param title: Name of the plot
+    """
 
-	# Axis limits
-	maxX = np.amax(ground_truth[0,:]) + 5
-	minX = np.amin(ground_truth[0,:]) - 5
-	maxY = np.amax(ground_truth[1,:]) + 5
-	minY = np.amin(ground_truth[1,:]) - 5 
-	maxZ = np.amax(ground_truth[2,:]) + 5
-	minZ = np.amin(ground_truth[2,:]) - 5
+    # Axis limits
+    maxX = np.amax(ground_truth[0,:]) + 5
+    minX = np.amin(ground_truth[0,:]) - 5
+    maxY = np.amax(ground_truth[1,:]) + 5
+    minY = np.amin(ground_truth[1,:]) - 5 
+    maxZ = np.amax(ground_truth[2,:]) + 5
+    minZ = np.amin(ground_truth[2,:]) - 5
 
-	est_traj_fig = plt.figure()
-	ax = est_traj_fig.add_subplot(111, projection='3d')
-	ax.plot(ground_truth[0,:], ground_truth[1,:], ground_truth[2,:], "-", label='Ground Truth')
-	ax.plot(trajectory_vo[0,:], trajectory_vo[1,:], trajectory_vo[2,:], "-", label='VO Estimate')
-	ax.plot(trajectory_vio[0,:], trajectory_vio[1,:], trajectory_vio[2,:], "-", label='VIO Estimate')
-	ax.set_xlabel('X [m]')
-	ax.set_ylabel('Y [m]')
-	ax.set_zlabel('Z [m]')
-	ax.set_title(title, y = 1.0)
-	ax.legend()
-	ax.set_xlim(minX, maxX)
-	ax.set_ylim(minY, maxY)
-	ax.set_zlim(minZ, maxZ)
-	plt.tight_layout()
-	plt.show()
+    est_traj_fig = plt.figure()
+    ax = est_traj_fig.add_subplot(111, projection='3d')
+    ax.plot(ground_truth[0,:], ground_truth[1,:], ground_truth[2,:], "-", label='Ground Truth')
+    ax.plot(trajectory_vo[0,:], trajectory_vo[1,:], trajectory_vo[2,:], "-", label='VO Estimate')
+    ax.plot(trajectory_vio[0,:], trajectory_vio[1,:], trajectory_vio[2,:], "-", label='VIO Estimate')
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Y [m]')
+    ax.set_zlabel('Z [m]')
+    ax.set_title(title, y = 1.0)
+    ax.legend()
+    ax.set_xlim(minX, maxX)
+    ax.set_ylim(minY, maxY)
+    ax.set_zlim(minZ, maxZ)
+    plt.tight_layout()
+    plt.show()
 
 def compare_quadrics(gt, estimated, title = "quadrics poses"):
     """
@@ -527,6 +531,8 @@ def compare_quadrics(gt, estimated, title = "quadrics poses"):
     ax.set_zlim(minZ, maxZ)
     plt.tight_layout()
     plt.show()
+
+    return est_traj_fig
 
 def visualize_quadrics(poses, title="Quadric poses"):
     """
@@ -613,3 +619,5 @@ def visualize_quadrics(poses, title="Quadric poses"):
     D3_plt.view_init(35, azim=45)
     plt.tight_layout()
     plt.show()
+
+    return fig

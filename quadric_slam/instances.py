@@ -180,8 +180,8 @@ class Instances:
     def __str__(self) -> str:
         s = self.__class__.__name__ + "("
         s += "num_instances={}, ".format(len(self))
-        s += "image_height={}, ".format(self._image_size[0])
-        s += "image_width={}, ".format(self._image_size[1])
+        # s += "image_height={}, ".format(self._image_size[0])
+        # s += "image_width={}, ".format(self._image_size[1])
         s += "fields=[{}])".format(", ".join(self._fields.keys()))
         return s
 
