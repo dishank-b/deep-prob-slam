@@ -1,6 +1,4 @@
 import numpy as np
-import sys
-import os
 
 import gtsam
 import gtsam_quadrics as gtquadric
@@ -97,7 +95,15 @@ class SLAM(object):
             quadric = self._init_quad_multi_frames(*zip(*box_cam_pair), self.calibration)
             quadric.addToValues(initial_estimate, L(obj_id))
 
-    def make_graph(self, instances):
+    def _add_landmark(self, instance, add_noise=True):
+        for obj_id, bbox in zip(instance.object_key, instance.bbox):
+            if add_noise:
+                bbox = np.random.multivariate_normal(bbox, self.bbox_noise.covariance())
+            box = gtquadric.AlignedBox2(*bbox)
+            bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), self.bbox_noise)
+            self.graph.add(bbf)
+
+    def make_graph(self, instances, add_landmarks = True, add_odom_noise=True, add_meas_noise=True):
         """
         Make the factor graph to be solved.
         Data association is assumed to be solved for this. 
@@ -115,23 +121,21 @@ class SLAM(object):
                 initial_estimate.insert(X(image_key), gtsam.Pose3(instance.pose))
             
             if i < len(instances)-1:
-                relative_pose = instance.pose.between(instances[i+1].pose)
-                # TODO: add noise to relative pose
+                pose_t1 = instances[i+1].pose
+                if add_odom_noise:
+                    noise = np.random.multivariate_normal(np.zeros(6), self.odometry_noise.covariance())
+                    relative_pose = instance.pose.between(pose_t1)
+                    pose_t1 = instance.pose.compose(relative_pose.compose(pose_t1.Expmap(noise)))
+                relative_pose = instance.pose.between(pose_t1)
                 odometry_factor = gtsam.BetweenFactorPose3(X(image_key), X(instances[i+1].image_key), relative_pose, self.odometry_noise)
                 self.graph.add(odometry_factor)
                 initial_estimate.insert(X(instances[i+1].image_key), initial_estimate.atPose3(X(image_key)).compose(relative_pose))
 
-            for obj_id, bbox in zip(instance.object_key, instance.bbox):
-                box = gtquadric.AlignedBox2(*bbox)
-                bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(image_key), L(obj_id), self.bbox_noise)
-                self.graph.add(bbf)
-                # if not initial_estimate.exists(L(obj_id)):
-                #     self.obj_poses_key.append(obj_id)
-                #     quadric = initialize_quadric(box, initial_estimate.atPose3(X(image_key)), self.calibration)
-                #     # quadric = gtquadric.ConstrainedDualQuadric()
-                #     quadric.addToValues(initial_estimate, L(obj_id))
-
-        self._init_quadrics(instances, initial_estimate)
+            if add_landmarks:
+                self._add_landmark(instance, add_meas_noise)
+        
+        if add_landmarks:
+            self._init_quadrics(instances, initial_estimate)
 
         return initial_estimate
 
@@ -184,36 +188,11 @@ class Calib_SLAM(SLAM):
     def __init__(self, intrinsics, prior_sigma, odom_sigma) -> None:
         super().__init__(intrinsics, prior_sigma, odom_sigma)
 
-    def make_graph(self, instances):
-        """
-        Make the factor graph to be solved.
-        Data association is assumed to be solved for this. 
-        No incremental solving. Joint optimizaition for all the camera poses and object poses at once. 
-
-        Uses grounth truth odometry as the odometry measurements. 
-        """
-        initial_estimate = gtsam.Values()
-        
-        for i, instance in enumerate(instances):
-            image_key = instance.image_key
-            self.cam_ids.append(image_key)
-            if i==0:
-                self.graph.add(gtsam.PriorFactorPose3(X(image_key), instance.pose, self.prior_noise))
-                initial_estimate.insert(X(image_key), gtsam.Pose3(instance.pose))
-            
-            if i < len(instances)-1:
-                relative_pose = instance.pose.between(instances[i+1].pose)
-                # TODO: add noise to relative pose
-                odometry_factor = gtsam.BetweenFactorPose3(X(image_key), X(instances[i+1].image_key), relative_pose, self.odometry_noise)
-                self.graph.add(odometry_factor)
-                initial_estimate.insert(X(instances[i+1].image_key), initial_estimate.atPose3(X(image_key)).compose(relative_pose))
-
-            for obj_id, bbox, bbox_covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
-                box = gtquadric.AlignedBox2(*bbox)
-                bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
-                bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(image_key), L(obj_id), bbox_noise)
-                self.graph.add(bbf)
-
-        self._init_quadrics(instances, initial_estimate)
-
-        return initial_estimate
+    def _add_landmark(self, instance, add_noise=False):
+        for obj_id, bbox, bbox_covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
+            if add_noise:
+                bbox = np.random.multivariate_normal(bbox, bbox_covar)
+            box = gtquadric.AlignedBox2(*bbox)
+            bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
+            bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), bbox_noise)
+            self.graph.add(bbf)

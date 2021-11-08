@@ -6,7 +6,7 @@ import gtsam
 from instances import Instances
 
 
-def tum_raw(dir):
+def tum_raw(dir, length = -1):
     """
     Read the data provided. 
     Instance - Class to handle each frame and it's associated attributes
@@ -30,11 +30,14 @@ def tum_raw(dir):
         instance_list.append(instance)
 
     instance_list.sort(key = lambda x: int(x.image_key))
+
+    if not (length==-1):
+        instance_list = instance_list[:length]
     
-    return instance_list
+    return instance_list 
 
 
-def tum_uncertainty(path):
+def tum_uncertainty(path, length = -1):
     """
     Read the data with bounding box uncertainty estimates available. 
     """
@@ -42,7 +45,7 @@ def tum_uncertainty(path):
     data = torch.load(path, map_location=torch.device('cpu'))
 
     instance_list = []
-    
+
     for key in data['predicted_boxes'].keys():
         instance = Instances(bbox = data['predicted_boxes'][key].numpy(),
                     image_key = int(data['image_keys'][key].numpy()[0]),
@@ -55,6 +58,9 @@ def tum_uncertainty(path):
         instance_list.append(instance)
 
     instance_list.sort(key = lambda x: int(x.image_key))
+
+    if not (length==-1):
+        instance_list = instance_list[:length] 
     
     return instance_list
 
