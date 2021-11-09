@@ -5,8 +5,43 @@ from PIL import Image, ImageDraw
 import torch
 from boxes import Boxes
 
+import gtsam
+from gtsam.symbol_shorthand import X, L
 
 class Instances:
+    """
+    Implement class to handle multiple isntances. 
+    """
+    def __init__(self, instances: List["Instance"]) -> None:
+        self.instances = instances
+    
+    def __getattr__(self, name: str) -> list:
+        return [instance.get(name) for instance in self.instances]
+
+    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instances":
+        """
+        Args:
+            item: an index-like object and will be used to index all the fields.
+
+        Returns:
+            If `item` is a string, return the data in the corresponding field.
+            Otherwise, returns an `Instances` where all fields are indexed by `item`.
+        """
+        return self.instances[item]
+
+    def toValues(self) -> gtsam.Values:
+        values = gtsam.Values()
+
+        for key, pose in zip(self.image_key, self.pose):
+            values.insert(X(key), pose)
+
+        return values
+
+    def __len__(self) -> int:
+        return len(self.instances)
+
+
+class Instance:
     """
     This class represents a list of instances in an image.
     It stores the attributes of instances (e.g., boxes, masks, labels, scores) as "fields".
@@ -119,14 +154,14 @@ class Instances:
         Returns:
             Instances: all fields are called with a `to(device)`, if the field has this method.
         """
-        ret = Instances(self._image_size)
+        ret = Instance(self._image_size)
         for k, v in self._fields.items():
             if hasattr(v, "to"):
                 v = v.to(device)
             ret.set(k, v)
         return ret
 
-    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instances":
+    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instance":
         """
         Args:
             item: an index-like object and will be used to index all the fields.
@@ -135,7 +170,7 @@ class Instances:
             If `item` is a string, return the data in the corresponding field.
             Otherwise, returns an `Instances` where all fields are indexed by `item`.
         """
-        ret = Instances()
+        ret = Instance()
         for k, v in self._fields.items():
             ret.set(k, v[item])
         return ret
@@ -146,7 +181,7 @@ class Instances:
         raise NotImplementedError("Empty Instances does not support __len__!")
 
     @staticmethod
-    def cat(instance_lists: List["Instances"]) -> "Instances":
+    def cat(instance_lists: List["Instance"]) -> "Instance":
         """
         Args:
             instance_lists (list[Instances])
@@ -154,7 +189,7 @@ class Instances:
         Returns:
             Instances
         """
-        assert all(isinstance(i, Instances) for i in instance_lists)
+        assert all(isinstance(i, Instance) for i in instance_lists)
         assert len(instance_lists) > 0
         if len(instance_lists) == 1:
             return instance_lists[0]

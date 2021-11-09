@@ -3,7 +3,7 @@ import glob
 import yaml
 import torch
 import gtsam
-from instances import Instances
+from instances import Instances, Instance
 
 
 def tum_raw(dir, length = -1):
@@ -25,7 +25,7 @@ def tum_raw(dir, length = -1):
     for file_name in file_names:
         file = open(file_name,'r')
         file = yaml.load(file)
-        instance = Instances(**file)
+        instance = Instance(**file)
         instance.pose = gtsam.Pose3(gtsam.Rot3.Quaternion(instance.pose[-1], *instance.pose[3:-1]), gtsam.Point3(*instance.pose[:3]))
         instance_list.append(instance)
 
@@ -47,7 +47,7 @@ def tum_uncertainty(path, length = -1):
     instance_list = []
 
     for key in data['predicted_boxes'].keys():
-        instance = Instances(bbox = data['predicted_boxes'][key].numpy(),
+        instance = Instance(bbox = data['predicted_boxes'][key].numpy(),
                     image_key = int(data['image_keys'][key].numpy()[0]),
                     bbox_covar = data['predicted_covar_mats'][key].numpy(),
                     pose = data['camera_pose'][key].numpy()[0],
@@ -62,6 +62,6 @@ def tum_uncertainty(path, length = -1):
     if not (length==-1):
         instance_list = instance_list[:length] 
     
-    return instance_list
+    return Instances(instance_list)
 
 
