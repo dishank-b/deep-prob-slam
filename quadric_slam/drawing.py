@@ -75,6 +75,7 @@ class Visualizer(object):
     def plot(self, gt, results, compare=True):
         gt_cam = np.array([gt.atPose3(X(id)).translation() for id in self.cam_ids]).T
         esti_cam = np.array([results.atPose3(X(id)).translation() for id in self.cam_ids]).T
+        gt_orien = np.array([results.atPose3(X(id)).rotation().xyz() for id in self.cam_ids]).T
 
         init_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(gt, L(id)).centroid() for id in self.bbox_ids]).T
         esti_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(results, L(id)).centroid() for id in self.bbox_ids]).T
@@ -82,6 +83,7 @@ class Visualizer(object):
         if compare:
             trajectory = visualization.compare_3d(gt_cam, esti_cam, "trajectory")
             quads = visualization.compare_quadrics(init_quad, esti_quad, "Quadrics")
+        
         else:
             gt_trajectory = visualization.visualize_trajectory(gt_cam)
             esti_trajectory = visualization.visualize_trajectory(esti_cam)
@@ -90,11 +92,6 @@ class Visualizer(object):
             esti_quad = visualization.visualize_quadrics(esti_quad)
         
         return {"Cam Trajectory": trajectory, "Quadrics pose": quads}
-
-
-
-
-
 
 class CV2Drawing(object):
     def __init__(self, image):

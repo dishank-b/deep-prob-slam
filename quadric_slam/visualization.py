@@ -2,6 +2,8 @@
 #
 # Author: Miguel Saavedra
 
+from typing import List, Optional
+
 import matplotlib as mpl
 import matplotlib.pyplot as plt
 import matplotlib.gridspec as gridspec
@@ -11,7 +13,77 @@ import numpy as np
 import pandas as pd
 # import cv2
 
-# from rotations import Quaternion, skew_symmetric
+def compare_3d(ground_truth, trajectory, title):
+    """
+    Plot the vehicle's trajectory in 3D space
+
+    :param ground_truth: Numpy array (3 x M) where M is the number of samples
+        with the ground truth trayectory of the vehicle.
+    :param trajectory: Numpy array (3 x M) where M is the number of samples
+        with the estimated trajectory of the vehicle.
+    :param title: Name of the plot
+    """
+
+    # Axis limits
+    maxX = np.amax(trajectory[0,:]) + 5
+    minX = np.amin(trajectory[0,:]) - 5
+    maxY = np.amax(trajectory[1,:]) + 5
+    minY = np.amin(trajectory[1,:]) - 5 
+    maxZ = np.amax(trajectory[2,:]) + 5
+    minZ = np.amin(trajectory[2,:]) - 5
+
+    est_traj_fig = plt.figure()
+    ax = est_traj_fig.add_subplot(111, projection='3d')
+    ax.plot(ground_truth[0,:], ground_truth[1,:], ground_truth[2,:], "-", label='Ground Truth')
+    ax.plot(trajectory[0,:], trajectory[1,:], trajectory[2,:], "-", label='Estimated')
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Y [m]')
+    ax.set_zlabel('Z [m]')
+    ax.set_title(title, y = 1.0)
+    ax.legend()
+    ax.set_xlim(minX, maxX)
+    ax.set_ylim(minY, maxY)
+    ax.set_zlim(minZ, maxZ)
+    plt.tight_layout()
+    plt.show()
+    
+    return est_traj_fig
+
+def compare_quadrics(gt, estimated, title = "quadrics poses"):
+    """
+    Plot the quadrics in 3D space
+
+    :param gt: Numpy array (3 x M) where M is the number of quadrics
+        with the ground truth 
+    :param estimated: Numpy array (3 x M) where M is the number of quadrics
+        with the estimated. 
+    :param title: Name of the plot
+    """
+
+    # Axis limits
+    maxX = np.amax(estimated[0,:]) + 5
+    minX = np.amin(estimated[0,:]) - 5
+    maxY = np.amax(estimated[1,:]) + 5
+    minY = np.amin(estimated[1,:]) - 5 
+    maxZ = np.amax(estimated[2,:]) + 5
+    minZ = np.amin(estimated[2,:]) - 5
+
+    est_traj_fig = plt.figure()
+    ax = est_traj_fig.add_subplot(111, projection='3d')
+    ax.scatter(gt[0,:], gt[1,:], gt[2,:], c="blue", zorder=0)
+    ax.scatter(estimated[0,:], estimated[1,:], estimated[2,:], c="green", zorder=0)
+    ax.set_xlabel('X [m]')
+    ax.set_ylabel('Y [m]')
+    ax.set_zlabel('Z [m]')
+    ax.set_title(title, y = 1.0)
+    ax.legend()
+    ax.set_xlim(minX, maxX)
+    ax.set_ylim(minY, maxY)
+    ax.set_zlim(minZ, maxZ)
+    plt.tight_layout()
+    # plt.show()
+
+    return est_traj_fig
 
 def visualize_trajectory(trajectory, title = "Vehicle's trajectory"):
     """
@@ -101,11 +173,66 @@ def visualize_trajectory(trajectory, title = "Vehicle's trajectory"):
 
     return fig
 
+def visualize_poses(trajectory, title="trajectory"):
+    
+    # locatoin = (3,M) where M is number of poses in trajectory with each pose = x,y,z
+    locations = np.array([pose.translation() for pose in trajectory]).T
+
+    # lists for x, y and z values
+    locX = list(locations[0,:])
+    locY = list(locations[1,:])
+    locZ = list(locations[2,:])
+    
+    # Axis limits
+    maxX = np.amax(locX) + 1
+    minX = np.amin(locX) - 1
+    maxY = np.amax(locY) + 1
+    minY = np.amin(locY) - 1 
+    maxZ = np.amax(locZ) + 1
+    minZ = np.amin(locZ) - 1
+
+    mpl.rc("figure", facecolor="white")
+    plt.style.use("seaborn-whitegrid")
+
+    # Plot the figure
+    fig = plt.figure(figsize=(16, 12), dpi=100)
+    gspec = gridspec.GridSpec(1, 1)
+    D3_plt = plt.subplot(gspec[0,0], projection='3d')
+
+    # Plot 3D
+    D3_plt.set_title("3D trajectory", y = 1.1)
+    D3_plt.plot3D(xs = locX, ys = locY, zs = locZ, zorder=0)
+    D3_plt.scatter(0, 0, 0, s=8, c="green", zorder=1)
+    D3_plt.scatter(locX[-1], locY[-1], locZ[-1], s=8, c="red", zorder=1)
+    D3_plt.set_xlim3d(minX, maxX)
+    D3_plt.set_ylim3d(minY, maxY)
+    D3_plt.set_zlim3d(minZ, maxZ)
+    D3_plt.tick_params(direction='out', pad=-2)
+    D3_plt.set_xlabel("X [m]", labelpad=0)
+    D3_plt.set_ylabel("Y [m]", labelpad=0)
+    D3_plt.set_zlabel("Z [m]", labelpad=-5)
+
+    #plot orientation
+    dx, dy, dz = np.eye(3)
+    for pose in trajectory:
+        R = pose.rotation().matrix()
+        frame = ReferenceFrame(pose.translation(),
+                dx = R@dx,
+                dy = R@dy,
+                dz = R@dz)
+        frame.draw3d(ax= D3_plt)    
+
+    # Plotting the result
+    fig.suptitle(title, fontsize=16, y = 1.05)
+    D3_plt.view_init(35, azim=45)
+    plt.tight_layout()
+    plt.show()
+
 def visualize_angles(rotations, title = "Vehicle's euler angles"):
     """
     Plot the vehicle's orientation (Euler angles)
 
-    :param rotations: Numpy array (4 x M) where M is the number of samples. 
+    :param rotations: Numpy array (3 x M) where M is the number of samples. 
         This variable has a Quaternion at each time-step.
     :param title: Name of the plot
     """
@@ -119,7 +246,7 @@ def visualize_angles(rotations, title = "Vehicle's euler angles"):
     # Transform Quaternion into Euler angle representation
     for i in range(0, rotations.shape[1]):
         current_rot = rotations[:, i]
-        q = Quaternion(*current_rot).to_euler()
+        q = current_rot
         
         roll.append(q.item(0))
         pitch.append(q.item(1))
@@ -185,41 +312,93 @@ def visualize_angles(rotations, title = "Vehicle's euler angles"):
     plt.tight_layout()
     plt.show()
 
-def compare_3d(ground_truth, trajectory, title):
+def visualize_quadrics(poses, title="Quadric poses"):
     """
-    Plot the vehicle's trajectory in 3D space
+    Plot the vehicle's trajectory
 
-    :param ground_truth: Numpy array (3 x M) where M is the number of samples
-        with the ground truth trayectory of the vehicle.
     :param trajectory: Numpy array (3 x M) where M is the number of samples
-        with the estimated trajectory of the vehicle.
+        with the trayectory of the vehicle.
     :param title: Name of the plot
     """
 
+    # lists for x, y and z values
+    locX = list(poses[0,:])
+    locY = list(poses[1,:])
+    locZ = list(poses[2,:])
+    
     # Axis limits
-    maxX = np.amax(trajectory[0,:]) + 5
-    minX = np.amin(trajectory[0,:]) - 5
-    maxY = np.amax(trajectory[1,:]) + 5
-    minY = np.amin(trajectory[1,:]) - 5 
-    maxZ = np.amax(trajectory[2,:]) + 5
-    minZ = np.amin(trajectory[2,:]) - 5
+    maxX = np.amax(locX) + 1
+    minX = np.amin(locX) - 1
+    maxY = np.amax(locY) + 1
+    minY = np.amin(locY) - 1 
+    maxZ = np.amax(locZ) + 1
+    minZ = np.amin(locZ) - 1
 
-    est_traj_fig = plt.figure()
-    ax = est_traj_fig.add_subplot(111, projection='3d')
-    ax.plot(ground_truth[0,:], ground_truth[1,:], ground_truth[2,:], "-", label='Ground Truth')
-    ax.plot(trajectory[0,:], trajectory[1,:], trajectory[2,:], "-", label='Estimated')
-    ax.set_xlabel('X [m]')
-    ax.set_ylabel('Y [m]')
-    ax.set_zlabel('Z [m]')
-    ax.set_title(title, y = 1.0)
-    ax.legend()
-    ax.set_xlim(minX, maxX)
-    ax.set_ylim(minY, maxY)
-    ax.set_zlim(minZ, maxZ)
+    # Set styles
+    mpl.rc("figure", facecolor="white")
+    plt.style.use("seaborn-whitegrid")
+
+    # Plot the figure
+    fig = plt.figure(figsize=(8, 6), dpi=100)
+    gspec = gridspec.GridSpec(2, 2)
+    ZY_plt = plt.subplot(gspec[1,1])
+    YX_plt = plt.subplot(gspec[0,1])
+    ZX_plt = plt.subplot(gspec[1,0])
+    D3_plt = plt.subplot(gspec[0,0], projection='3d')
+    
+    toffset = 1.0
+    
+    # Actual trajectory plotting ZX
+    ZX_plt.set_title("Trajectory (X, Z)", y=toffset)
+    ZX_plt.scatter(locX, locZ, s=8, c="blue", label="Start location", zorder=2)
+    ZX_plt.set_xlabel("X [m]")
+    ZX_plt.set_ylabel("Z [m]")
+    # Plot vehicle initial location
+    ZX_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
+    ZX_plt.scatter(locX[-1], locZ[-1], s=8, c="red", label="End location", zorder=2)
+    ZX_plt.set_xlim([minX, maxX])
+    ZX_plt.set_ylim([minZ, maxZ])
+    ZX_plt.legend(bbox_to_anchor=(1.05, 1.0), loc=3, title="Legend", borderaxespad=0., fontsize="medium", frameon=True)
+        
+    # Plot ZY
+    ZY_plt.set_title("Trajectory (Y, Z)", y=toffset)
+    ZY_plt.set_xlabel("Y [m]")
+    ZY_plt.scatter(locY, locZ, s=8, c="blue", label="Start location", zorder=2)
+    ZY_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
+    ZY_plt.scatter(locY[-1], locZ[-1], s=8, c="red", label="End location", zorder=2)
+    ZY_plt.set_xlim([minY, maxY])
+    ZY_plt.set_ylim([minZ, maxZ])
+    
+    # Plot YX
+    YX_plt.set_title("Trajectory (Y X)", y=toffset)
+    YX_plt.set_ylabel("X [m]")
+    YX_plt.set_xlabel("Y [m]")
+    YX_plt.scatter(locY, locX, s=8, c="blue", label="Start location", zorder=2)
+    YX_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
+    YX_plt.scatter(locY[-1], locX[-1], s=8, c="red", label="End location", zorder=2)
+    YX_plt.set_xlim([minY, maxY])
+    YX_plt.set_ylim([minX, maxX])
+
+    # Plot 3D
+    D3_plt.set_title("3D trajectory", y = 1.1)
+    D3_plt.scatter(xs = locX, ys = locY, zs = locZ, zorder=0)
+    D3_plt.scatter(0, 0, 0, s=8, c="green", zorder=1)
+    D3_plt.scatter(locX[-1], locY[-1], locZ[-1], s=8, c="red", zorder=1)
+    D3_plt.set_xlim3d(minX, maxX)
+    D3_plt.set_ylim3d(minY, maxY)
+    D3_plt.set_zlim3d(minZ, maxZ)
+    D3_plt.tick_params(direction='out', pad=-2)
+    D3_plt.set_xlabel("X [m]", labelpad=0)
+    D3_plt.set_ylabel("Y [m]", labelpad=0)
+    D3_plt.set_zlabel("Z [m]", labelpad=-5)
+    
+    # Plotting the result
+    fig.suptitle(title, fontsize=16, y = 1.05)
+    D3_plt.view_init(35, azim=45)
     plt.tight_layout()
     plt.show()
-    
-    return est_traj_fig
+
+    return fig
 
 def compare_2d_trajectory(ground_truth, trajectory, title = "VO vs Ground Truth Trajectory"):
     """
@@ -461,163 +640,72 @@ def compare_2d_angles(ground_truth, rotations, title = "VO vs Ground Truth angle
     plt.tight_layout()
     plt.show()
 
-def compare_3d_all(ground_truth, trajectory_vo, trajectory_vio, title):
-    """
-    Plot the vehicle's trajectory in 3D space for the ground truth, VO and VIO estimates
+class ReferenceFrame:
+    def __init__(
+        self,
+        origin: np.ndarray,
+        dx: np.ndarray,
+        dy: np.ndarray,
+        dz: np.ndarray
+    ) -> None:
+        self.origin = origin
+        self.dx = dx
+        self.dy = dy
+        self.dz = dz
 
-    :param ground_truth: Numpy array (3 x M) where M is the number of samples
-        with the ground truth trayectory of the vehicle.
-    :param trajectory_vo: Numpy array (3 x M) where M is the number of samples
-        with the estimated VO trajectory of the vehicle.
-    :param trajectory_vio: Numpy array (3 x M) where M is the number of samples
-        with the estimated VIO trajectory of the vehicle.
-    :param title: Name of the plot
-    """
+    def draw3d(
+        self,
+        head_length: float = 0.1,
+        color: list = ["red", "green", "blue"],
+        ax: Optional[Axes3D] = None,
+        name: str = ""
+    ) -> Axes3D:
+        if ax is None:
+            ax = plt.gca(projection="3d")
 
-    # Axis limits
-    maxX = np.amax(ground_truth[0,:]) + 5
-    minX = np.amin(ground_truth[0,:]) - 5
-    maxY = np.amax(ground_truth[1,:]) + 5
-    minY = np.amin(ground_truth[1,:]) - 5 
-    maxZ = np.amax(ground_truth[2,:]) + 5
-    minZ = np.amin(ground_truth[2,:]) - 5
+        # ax.text(*self.origin + 0.5, f"({name})")
+        ax = draw3d_arrow(
+            ax=ax,
+            arrow_location=self.origin,
+            arrow_vector=self.dx,
+            head_length=head_length,
+            color=color[0]
+        )
+        ax = draw3d_arrow(
+            ax=ax,
+            arrow_location=self.origin,
+            arrow_vector=self.dy,
+            head_length=head_length,
+            color=color[1]
+        )
+        ax = draw3d_arrow(
+            ax=ax,
+            arrow_location=self.origin,
+            arrow_vector=self.dz,
+            head_length=head_length,
+            color=color[2]
+        )
+        return ax
 
-    est_traj_fig = plt.figure()
-    ax = est_traj_fig.add_subplot(111, projection='3d')
-    ax.plot(ground_truth[0,:], ground_truth[1,:], ground_truth[2,:], "-", label='Ground Truth')
-    ax.plot(trajectory_vo[0,:], trajectory_vo[1,:], trajectory_vo[2,:], "-", label='VO Estimate')
-    ax.plot(trajectory_vio[0,:], trajectory_vio[1,:], trajectory_vio[2,:], "-", label='VIO Estimate')
-    ax.set_xlabel('X [m]')
-    ax.set_ylabel('Y [m]')
-    ax.set_zlabel('Z [m]')
-    ax.set_title(title, y = 1.0)
-    ax.legend()
-    ax.set_xlim(minX, maxX)
-    ax.set_ylim(minY, maxY)
-    ax.set_zlim(minZ, maxZ)
-    plt.tight_layout()
-    plt.show()
+def draw3d_arrow(
+    arrow_location: np.ndarray,
+    arrow_vector: np.ndarray,
+    head_length: float = 0.1,
+    color: Optional[str] = None,
+    name: Optional[str] = None,
+    ax: Optional[Axes3D] = None,
+    ) -> Axes3D:
+    if ax is None:
+        ax = plt.gca(projection="3d")
 
-def compare_quadrics(gt, estimated, title = "quadrics poses"):
-    """
-    Plot the quadrics in 3D space
+    ax.quiver(
+        *arrow_location,
+        *arrow_vector,
+        length= head_length,
+        arrow_length_ratio=head_length / np.linalg.norm(arrow_vector),
+        color=color,
+    )
+    if name is not None:
+        ax.text(*(arrow_location + arrow_vector), name)
 
-    :param gt: Numpy array (3 x M) where M is the number of quadrics
-        with the ground truth 
-    :param estimated: Numpy array (3 x M) where M is the number of quadrics
-        with the estimated. 
-    :param title: Name of the plot
-    """
-
-    # Axis limits
-    maxX = np.amax(estimated[0,:]) + 5
-    minX = np.amin(estimated[0,:]) - 5
-    maxY = np.amax(estimated[1,:]) + 5
-    minY = np.amin(estimated[1,:]) - 5 
-    maxZ = np.amax(estimated[2,:]) + 5
-    minZ = np.amin(estimated[2,:]) - 5
-
-    est_traj_fig = plt.figure()
-    ax = est_traj_fig.add_subplot(111, projection='3d')
-    ax.scatter(gt[0,:], gt[1,:], gt[2,:], c="blue", zorder=0)
-    ax.scatter(estimated[0,:], estimated[1,:], estimated[2,:], c="green", zorder=0)
-    ax.set_xlabel('X [m]')
-    ax.set_ylabel('Y [m]')
-    ax.set_zlabel('Z [m]')
-    ax.set_title(title, y = 1.0)
-    ax.legend()
-    ax.set_xlim(minX, maxX)
-    ax.set_ylim(minY, maxY)
-    ax.set_zlim(minZ, maxZ)
-    plt.tight_layout()
-    plt.show()
-
-    return est_traj_fig
-
-def visualize_quadrics(poses, title="Quadric poses"):
-    """
-    Plot the vehicle's trajectory
-
-    :param trajectory: Numpy array (3 x M) where M is the number of samples
-        with the trayectory of the vehicle.
-    :param title: Name of the plot
-    """
-
-    # lists for x, y and z values
-    locX = list(poses[0,:])
-    locY = list(poses[1,:])
-    locZ = list(poses[2,:])
-    
-    # Axis limits
-    maxX = np.amax(locX) + 1
-    minX = np.amin(locX) - 1
-    maxY = np.amax(locY) + 1
-    minY = np.amin(locY) - 1 
-    maxZ = np.amax(locZ) + 1
-    minZ = np.amin(locZ) - 1
-
-    # Set styles
-    mpl.rc("figure", facecolor="white")
-    plt.style.use("seaborn-whitegrid")
-
-    # Plot the figure
-    fig = plt.figure(figsize=(8, 6), dpi=100)
-    gspec = gridspec.GridSpec(2, 2)
-    ZY_plt = plt.subplot(gspec[1,1])
-    YX_plt = plt.subplot(gspec[0,1])
-    ZX_plt = plt.subplot(gspec[1,0])
-    D3_plt = plt.subplot(gspec[0,0], projection='3d')
-    
-    toffset = 1.0
-    
-    # Actual trajectory plotting ZX
-    ZX_plt.set_title("Trajectory (X, Z)", y=toffset)
-    ZX_plt.scatter(locX, locZ, s=8, c="blue", label="Start location", zorder=2)
-    ZX_plt.set_xlabel("X [m]")
-    ZX_plt.set_ylabel("Z [m]")
-    # Plot vehicle initial location
-    ZX_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
-    ZX_plt.scatter(locX[-1], locZ[-1], s=8, c="red", label="End location", zorder=2)
-    ZX_plt.set_xlim([minX, maxX])
-    ZX_plt.set_ylim([minZ, maxZ])
-    ZX_plt.legend(bbox_to_anchor=(1.05, 1.0), loc=3, title="Legend", borderaxespad=0., fontsize="medium", frameon=True)
-        
-    # Plot ZY
-    ZY_plt.set_title("Trajectory (Y, Z)", y=toffset)
-    ZY_plt.set_xlabel("Y [m]")
-    ZY_plt.scatter(locY, locZ, s=8, c="blue", label="Start location", zorder=2)
-    ZY_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
-    ZY_plt.scatter(locY[-1], locZ[-1], s=8, c="red", label="End location", zorder=2)
-    ZY_plt.set_xlim([minY, maxY])
-    ZY_plt.set_ylim([minZ, maxZ])
-    
-    # Plot YX
-    YX_plt.set_title("Trajectory (Y X)", y=toffset)
-    YX_plt.set_ylabel("X [m]")
-    YX_plt.set_xlabel("Y [m]")
-    YX_plt.scatter(locY, locX, s=8, c="blue", label="Start location", zorder=2)
-    YX_plt.scatter([0], [0], s=8, c="green", label="Start location", zorder=2)
-    YX_plt.scatter(locY[-1], locX[-1], s=8, c="red", label="End location", zorder=2)
-    YX_plt.set_xlim([minY, maxY])
-    YX_plt.set_ylim([minX, maxX])
-
-    # Plot 3D
-    D3_plt.set_title("3D trajectory", y = 1.1)
-    D3_plt.scatter(xs = locX, ys = locY, zs = locZ, zorder=0)
-    D3_plt.scatter(0, 0, 0, s=8, c="green", zorder=1)
-    D3_plt.scatter(locX[-1], locY[-1], locZ[-1], s=8, c="red", zorder=1)
-    D3_plt.set_xlim3d(minX, maxX)
-    D3_plt.set_ylim3d(minY, maxY)
-    D3_plt.set_zlim3d(minZ, maxZ)
-    D3_plt.tick_params(direction='out', pad=-2)
-    D3_plt.set_xlabel("X [m]", labelpad=0)
-    D3_plt.set_ylabel("Y [m]", labelpad=0)
-    D3_plt.set_zlabel("Z [m]", labelpad=-5)
-    
-    # Plotting the result
-    fig.suptitle(title, fontsize=16, y = 1.05)
-    D3_plt.view_init(35, azim=45)
-    plt.tight_layout()
-    plt.show()
-
-    return fig
+    return ax
