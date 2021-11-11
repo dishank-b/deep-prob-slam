@@ -2,23 +2,32 @@
 import itertools
 from typing import Any, Dict, List, Tuple, Union
 from PIL import Image, ImageDraw
+
 import torch
-from boxes import Boxes
+import numpy as np
 
 import gtsam
+import gtsam_quadrics as gtquadric
 from gtsam.symbol_shorthand import X, L
+
+from quadrics_multiview import groundtruth_quadrics
 
 class Instances:
     """
     Implement class to handle multiple isntances. 
     """
-    def __init__(self, instances: List["Instance"]) -> None:
+    def __init__(self, instances: list["Instance"], calibration: dict) -> None:
         self.instances = instances
+        self.calibration = gtsam.Cal3_S2(calibration["fx"], calibration["fy"],
+                                         0.0, calibration["cx"], calibration["cy"])
+        self.values = None
+        self.cam_ids = None
+        self.bbox_ids = None
     
-    def __getattr__(self, name: str) -> list:
+    def __getattr__(self, name: str) -> list["Instance"]:
         return [instance.get(name) for instance in self.instances]
 
-    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instances":
+    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instance":
         """
         Args:
             item: an index-like object and will be used to index all the fields.
@@ -30,15 +39,38 @@ class Instances:
         return self.instances[item]
 
     def toValues(self) -> gtsam.Values:
-        values = gtsam.Values()
+        if self.values==None:
+            self.values = gtsam.Values()
 
-        for key, pose in zip(self.image_key, self.pose):
-            values.insert(X(key), pose)
+            for key, pose in zip(self.image_key, self.pose):
+                self.values.insert(X(key), pose)
 
-        return values
+            groundtruth_quadrics(self.instances, self.values, self.calibration)
+
+            return self.values
+        
+        else:
+            return self.values
+
+    def get_cam_ids(self):
+        if self.cam_ids == None:
+            self.cam_ids = [instance.image_key for instance in self.instances]
+        return self.cam_ids
+
+    def get_box_ids(self):
+        if self.bbox_ids == None:
+            self.bbox_ids = []
+            for instance in self.instances:
+                for obj_id in instance.object_key:
+                    if obj_id not in self.bbox_ids:
+                        self.bbox_ids.append(int(obj_id))
+        
+        return self.bbox_ids
 
     def __len__(self) -> int:
         return len(self.instances)
+
+    
 
 
 class Instance:

@@ -6,7 +6,7 @@ import gtsam
 from instances import Instances, Instance
 
 
-def tum_raw(dir, length = -1):
+def tum_raw(dir, intrinsics, length = -1):
     """
     Read the data provided. 
     Instance - Class to handle each frame and it's associated attributes
@@ -34,10 +34,10 @@ def tum_raw(dir, length = -1):
     if not (length==-1):
         instance_list = instance_list[:length]
     
-    return instance_list 
+    return Instances(instance_list, intrinsics) 
 
 
-def tum_uncertainty(path, length = -1):
+def tum_uncertainty(path, intrinsics, length = -1):
     """
     Read the data with bounding box uncertainty estimates available. 
     """
@@ -62,6 +62,6 @@ def tum_uncertainty(path, length = -1):
     if not (length==-1):
         instance_list = instance_list[:length] 
     
-    return Instances(instance_list)
+    return Instances(instance_list, intrinsics)
 
 

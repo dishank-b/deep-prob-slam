@@ -72,26 +72,35 @@ class Visualizer(object):
                 cv2.imshow("image", image)
                 cv2.waitKey(1)
 
-    def plot(self, gt, results, compare=True):
+    def plot_comparison(self, gt, results, title="Comparison", add_landmarks = True):
+        plots = {}
         gt_cam = np.array([gt.atPose3(X(id)).translation() for id in self.cam_ids]).T
         esti_cam = np.array([results.atPose3(X(id)).translation() for id in self.cam_ids]).T
-        gt_orien = np.array([results.atPose3(X(id)).rotation().xyz() for id in self.cam_ids]).T
+        trajectory = visualization.compare_3d(gt_cam, esti_cam, title)
 
-        init_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(gt, L(id)).centroid() for id in self.bbox_ids]).T
-        esti_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(results, L(id)).centroid() for id in self.bbox_ids]).T
+        plots.update({"Cam Trajectory": trajectory})
 
-        if compare:
-            trajectory = visualization.compare_3d(gt_cam, esti_cam, "trajectory")
-            quads = visualization.compare_quadrics(init_quad, esti_quad, "Quadrics")
-        
-        else:
-            gt_trajectory = visualization.visualize_trajectory(gt_cam)
-            esti_trajectory = visualization.visualize_trajectory(esti_cam)
+        if add_landmarks:
+            init_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(gt, L(id)).centroid() for id in self.bbox_ids]).T
+            esti_quad = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(results, L(id)).centroid() for id in self.bbox_ids]).T
+            quads = visualization.compare_quadrics(init_quad, esti_quad, title)
+            plots.update({"Quadrics pose": quads})
 
-            gt_quad = visualization.visualize_quadrics(init_quad)
-            esti_quad = visualization.visualize_quadrics(esti_quad)
-        
-        return {"Cam Trajectory": trajectory, "Quadrics pose": quads}
+        return plots
+
+    def plot_trajectory(self, values, title="Trajectory", add_landmarks = True):
+        plots = {}
+        cam_poses = np.array([values.atPose3(X(id)).translation() for id in self.cam_ids]).T
+        trajectory = visualization.visualize_trajectory(cam_poses, title)
+        plots.update({"Cam Trajectory": trajectory})
+
+        if add_landmarks:
+            quad_poses = np.array([gtquadric.ConstrainedDualQuadric.getFromValues(values, L(id)).centroid() for id in self.bbox_ids]).T
+            quad_poses = visualization.visualize_quadrics(quad_poses, title)
+            plots.update({"Quadrics pose": quad_poses})
+
+        return plots
+
 
 class CV2Drawing(object):
     def __init__(self, image):

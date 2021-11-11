@@ -4,6 +4,8 @@ import gtsam
 import gtsam_quadrics as gtquadric
 from gtsam.symbol_shorthand import X, L
 
+from instances import Instances
+
 class SLAM(object):
     """
     Class for solve the object slam system 
@@ -25,76 +27,6 @@ class SLAM(object):
         """
         return gtsam.NonlinearFactorGraph()
 
-    def _init_quad_single_frame(self, bbox, camera_pose, camera_intrinsics):
-        """
-        Calculate q given one boudning box and camera pose. 
-        Solves for Aq = 0. Where A formed using one bouding box from the the image. 
-        Rank of A (4) is less than number of variables in q (10) to solve properly/
-        Hence underdeterminent system. 
-        """
-        planes = []
-        
-        for i in range(bbox.lines().size()):
-            planes.append(gtquadric.QuadricCamera.transformToImage(camera_pose, camera_intrinsics).transpose()@bbox.lines().at(i))
-        A = []
-        
-        for plane in planes:
-            a = plane[..., None]*np.ones((len(plane), len(plane)))*plane
-            A.append(a)
-        
-        for i in range(len(A)):
-            a = A[i]
-            a = np.triu(2*a)-np.diag(np.diag(a))
-            A[i] = a[np.triu_indices(len(a))]
-        
-        A = np.array(A)
-        
-        return A
-
-    def _init_quad_multi_frames(self, bboxes, camera_poses, camera_intrinsics):
-        """
-        Calculate quadric q given boudning box measurement over multiple frames and
-        respective camera poses. 
-        Solves for Aq = 0. Where A formed using one bouding box from the the image. 
-        Rank of A (4) is less than number of variables in q (10) to solve properly/
-        Hence underdeterminent system. 
-
-        Refer to Eq. 9 in the paper
-        """
-        A = []
-        
-        for box, camera_pose in zip(bboxes, camera_poses):
-            A.append(self._init_quad_single_frame(gtquadric.AlignedBox2(*box), camera_pose, camera_intrinsics))
-
-        A = np.concatenate(A)
-        
-        _, _, VT = np.linalg.svd(A)
-        q = VT.T[:,-1]
-        Q = np.zeros((4,4))
-        Q[np.triu_indices(4)] = q
-        Q = Q+Q.T-np.diag(np.diag(Q))
-        
-        return gtquadric.ConstrainedDualQuadric(Q)
-
-    def _init_quadrics(self, instances, initial_estimate):
-        """
-        Initialize the quadrics
-        """
-        obj_dict = {}
-        
-        for instance in instances:
-            for obj_id, box in zip(instance.object_key, instance.bbox):
-                if obj_id not in obj_dict:
-                    obj_dict[obj_id] = [[box, instance.pose]]
-                else:
-                    obj_dict[obj_id].append([box, instance.pose])
-
-        self.bbox_ids = sorted(list(obj_dict.keys()))
-        
-        for obj_id, box_cam_pair in obj_dict.items():
-            quadric = self._init_quad_multi_frames(*zip(*box_cam_pair), self.calibration)
-            quadric.addToValues(initial_estimate, L(obj_id))
-
     def _add_landmark(self, instance, add_noise=True):
         for obj_id, bbox in zip(instance.object_key, instance.bbox):
             if add_noise:
@@ -103,7 +35,7 @@ class SLAM(object):
             bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), self.bbox_noise)
             self.graph.add(bbf)
 
-    def make_graph(self, instances, add_landmarks = True, add_odom_noise=True, add_meas_noise=True):
+    def make_graph(self, instances: Instances, add_landmarks = True, add_odom_noise=True, add_meas_noise=True):
         """
         Make the factor graph to be solved.
         Data association is assumed to be solved for this. 
@@ -135,7 +67,11 @@ class SLAM(object):
                 self._add_landmark(instance, add_meas_noise)
         
         if add_landmarks:
-            self._init_quadrics(instances, initial_estimate)
+            gt_values = instances.toValues()
+            self.bbox_ids = instances.get_box_ids()
+            for box_id in instances.get_box_ids():
+                quadric = gtquadric.ConstrainedDualQuadric.getFromValues(gt_values, L(box_id))
+                quadric.addToValues(initial_estimate, L(box_id))
 
         return initial_estimate
 
@@ -193,6 +129,6 @@ class Calib_SLAM(SLAM):
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_covar)
             box = gtquadric.AlignedBox2(*bbox)
-            bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
+            bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float)) # is this right? need to check for this
             bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), bbox_noise)
             self.graph.add(bbf)

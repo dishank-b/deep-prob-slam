@@ -36,27 +36,32 @@ def main():
         PRIOR_SIGMA = [1*np.pi/180]*3 + [1e-4]*3
         ODOM_SIGMA = [config.odom_sigma[0]*np.pi/180]*3 + [config.odom_sigma[1]]*3  # reasonable range angle = 10-15˚, translation = 10-20cm
         BOX_SIGMA = [config.bbox_sigma]*4
+        landmarks = True
 
 
         # instances = dataloader.tum_raw("./data/preprocessed/")
-        instances = dataloader.tum_uncertainty("./data/tum.pth")
         file = open("./data/calibration.yaml", 'r')
         intrinsics  = yaml.load(file)
+        instances = dataloader.tum_uncertainty("./data/tum.pth", intrinsics)
 
         print("-------DATA LOADED--------------")
         # slam = slam_solver.SLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA, BOX_SIGMA)
         slam = slam_solver.Calib_SLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA)
+
         print("-------Making graph--------------")
-        initial_estimates = slam.make_graph(instances)
+        initial_estimates = slam.make_graph(instances, add_landmarks=landmarks)
+        
         print("-------Solving graph--------------")
         results = slam.solve(initial_estimates)
+        
         print("-------Evaluating--------------")
         metrics = slam.evaluate(initial_estimates, results)
         print(metrics)
 
+        print("-------Visualizing----------")
         visualizer = drawing.Visualizer(slam.cam_ids, slam.bbox_ids, slam.calibration)
-        plots = visualizer.plot(initial_estimates, results, compare=True)
-        # visualizer.visualize(instances, results)
+        visualizer.plot_comparison(initial_estimates, results, "Init vs Estimated", add_landmarks=landmarks)
+        visualizer.plot_comparison(instances.toValues(), initial_estimates, "GT vs Init", add_landmarks = landmarks)
 
         wandb.log(metrics)
 
