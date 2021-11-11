@@ -59,7 +59,7 @@ def main():
         print(metrics)
 
         print("-------Visualizing----------")
-        visualizer = drawing.Visualizer(slam.cam_ids, slam.bbox_ids, slam.calibration)
+        visualizer = drawing.Visualizer(slam.cam_ids, slam.bbox_ids, instances.calibration)
         visualizer.plot_comparison(initial_estimates, results, "Init vs Estimated", add_landmarks=landmarks)
         visualizer.plot_comparison(instances.toValues(), initial_estimates, "GT vs Init", add_landmarks = landmarks)
 

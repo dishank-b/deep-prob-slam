@@ -16,10 +16,13 @@ class Instances:
     """
     Implement class to handle multiple isntances. 
     """
-    def __init__(self, instances: list["Instance"], calibration: dict) -> None:
+    def __init__(self, instances: list["Instance"], calibration: dict = None) -> None:
         self.instances = instances
-        self.calibration = gtsam.Cal3_S2(calibration["fx"], calibration["fy"],
-                                         0.0, calibration["cx"], calibration["cy"])
+        if calibration!=None:
+            self.calibration = gtsam.Cal3_S2(calibration["fx"], calibration["fy"],
+                                            0.0, calibration["cx"], calibration["cy"])
+        else:
+            self.calibration = calibration
         self.values = None
         self.cam_ids = None
         self.bbox_ids = None
@@ -36,6 +39,11 @@ class Instances:
             If `item` is a string, return the data in the corresponding field.
             Otherwise, returns an `Instances` where all fields are indexed by `item`.
         """
+        if type(item)==slice:
+            ret = Instances(self.instances[item])
+            ret.calibration = self.calibration
+            return ret
+
         return self.instances[item]
 
     def toValues(self) -> gtsam.Values:

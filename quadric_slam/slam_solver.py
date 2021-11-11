@@ -10,10 +10,10 @@ class SLAM(object):
     """
     Class for solve the object slam system 
     """
-    def __init__(self, intrinsics, prior_sigma, odom_sigma, bbox_sigma = [20.0]*4) -> None:
+    def __init__(self, prior_sigma, odom_sigma, bbox_sigma = [20.0]*4) -> None:
         super().__init__()
         self.graph = self._init_graph()
-        self.calibration = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
+        # self.calibration = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
         self.prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(prior_sigma, dtype=float))
         self.odometry_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(odom_sigma, dtype=float))
         self.bbox_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(bbox_sigma, dtype=float))
@@ -121,8 +121,8 @@ class SLAM(object):
         return metrics
 
 class Calib_SLAM(SLAM):
-    def __init__(self, intrinsics, prior_sigma, odom_sigma) -> None:
-        super().__init__(intrinsics, prior_sigma, odom_sigma)
+    def __init__(self,prior_sigma, odom_sigma) -> None:
+        super().__init__(prior_sigma, odom_sigma)
 
     def _add_landmark(self, instance, add_noise=False):
         for obj_id, bbox, bbox_covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
