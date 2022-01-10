@@ -34,9 +34,8 @@ def init_quad_multi_frames(bboxes, camera_poses, camera_intrinsics):
     """
     Calculate quadric q given boudning box measurement over multiple frames and
     respective camera poses. 
-    Solves for Aq = 0. Where A formed using one bouding box from the the image. 
-    Rank of A (4) is less than number of variables in q (10) to solve properly/
-    Hence underdeterminent system. 
+    Solves for Aq = 0. Where A formed using multiple bouding box from the the image. 
+    Rank of A shoule be greater than number of variables in q (10) to solve properly.
 
     Refer to Eq. 9 in the paper
     """
@@ -47,8 +46,10 @@ def init_quad_multi_frames(bboxes, camera_poses, camera_intrinsics):
 
     A = np.concatenate(A)
     
-    _, _, VT = np.linalg.svd(A)
-    q = VT.T[:,-1]
+    _, s, VT = np.linalg.svd(A)
+
+    # should choose this q based on column with least singular value
+    q = VT.T[:, np.argmin(s)]
     Q = np.zeros((4,4))
     Q[np.triu_indices(4)] = q
     Q = Q+Q.T-np.diag(np.diag(Q))
@@ -71,3 +72,9 @@ def groundtruth_quadrics(instances, values: gtsam.Values, calibration):
     for obj_id, box_cam_pair in obj_dict.items():
         quadric = init_quad_multi_frames(*zip(*box_cam_pair), calibration)
         quadric.addToValues(values, L(obj_id))
+
+def initialize_quadric(quadric_measurements, current_trajectory, calibration):
+    boxes = [d['box'] for d in quadric_measurements]
+    camera_poses = [current_trajectory[d['pose_key']] for d in quadric_measurements]
+
+    return init_quad_multi_frames(boxes, camera_poses, calibration)

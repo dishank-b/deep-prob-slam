@@ -13,7 +13,7 @@ import numpy as np
 import pandas as pd
 # import cv2
 
-def compare_3d(ground_truth, trajectory, title):
+def compare_3d(ax, ground_truth, trajectory, title):
     """
     Plot the vehicle's trajectory in 3D space
 
@@ -32,8 +32,8 @@ def compare_3d(ground_truth, trajectory, title):
     maxZ = np.amax(trajectory[2,:]) + 5
     minZ = np.amin(trajectory[2,:]) - 5
 
-    est_traj_fig = plt.figure()
-    ax = est_traj_fig.add_subplot(111, projection='3d')
+    # est_traj_fig = plt.figure()
+    # ax = est_traj_fig.add_subplot(111, projection='3d')
     ax.plot(ground_truth[0,:], ground_truth[1,:], ground_truth[2,:], "-", label='Ground Truth')
     ax.plot(trajectory[0,:], trajectory[1,:], trajectory[2,:], "-", label='Estimated')
     ax.set_xlabel('X [m]')
@@ -45,11 +45,11 @@ def compare_3d(ground_truth, trajectory, title):
     ax.set_ylim(minY, maxY)
     ax.set_zlim(minZ, maxZ)
     plt.tight_layout()
-    plt.show()
+    # plt.show()
     
-    return est_traj_fig
+    # return est_traj_fig
 
-def compare_quadrics(gt, estimated, title = "quadrics poses"):
+def compare_quadrics(ax, gt, estimated, title = "quadrics poses"):
     """
     Plot the quadrics in 3D space
 
@@ -68,8 +68,8 @@ def compare_quadrics(gt, estimated, title = "quadrics poses"):
     maxZ = np.amax(estimated[2,:]) + 5
     minZ = np.amin(estimated[2,:]) - 5
 
-    est_traj_fig = plt.figure()
-    ax = est_traj_fig.add_subplot(111, projection='3d')
+    # est_traj_fig = plt.figure()
+    # ax = est_traj_fig.add_subplot(111, projection='3d')
     ax.scatter(gt[0,:], gt[1,:], gt[2,:], c="blue", zorder=0)
     ax.scatter(estimated[0,:], estimated[1,:], estimated[2,:], c="green", zorder=0)
     ax.set_xlabel('X [m]')
@@ -81,9 +81,9 @@ def compare_quadrics(gt, estimated, title = "quadrics poses"):
     ax.set_ylim(minY, maxY)
     ax.set_zlim(minZ, maxZ)
     plt.tight_layout()
-    plt.show()
+    # plt.show()
 
-    return est_traj_fig
+    # return est_traj_fig
 
 def visualize_trajectory(trajectory, title = "Vehicle's trajectory"):
     """

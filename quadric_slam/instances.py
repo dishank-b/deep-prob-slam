@@ -24,8 +24,8 @@ class Instances:
         else:
             self.calibration = calibration
         self.values = None
-        self.cam_ids = None
-        self.bbox_ids = None
+        self.cam_ids = self._get_cam_ids()
+        self.bbox_ids = self._get_box_ids()
     
     def __getattr__(self, name: str) -> list["Instance"]:
         return [instance.get(name) for instance in self.instances]
@@ -60,20 +60,18 @@ class Instances:
         else:
             return self.values
 
-    def get_cam_ids(self):
-        if self.cam_ids == None:
-            self.cam_ids = [instance.image_key for instance in self.instances]
-        return self.cam_ids
+    def _get_cam_ids(self):
+        cam_ids = [instance.image_key for instance in self.instances]
+        return cam_ids
 
-    def get_box_ids(self):
-        if self.bbox_ids == None:
-            self.bbox_ids = []
-            for instance in self.instances:
-                for obj_id in instance.object_key:
-                    if obj_id not in self.bbox_ids:
-                        self.bbox_ids.append(int(obj_id))
-        
-        return self.bbox_ids
+    def _get_box_ids(self):
+        bbox_ids = []
+        for instance in self.instances:
+            for obj_id in instance.object_key:
+                if obj_id not in bbox_ids:
+                    bbox_ids.append(int(obj_id))
+    
+        return bbox_ids
 
     def __len__(self) -> int:
         return len(self.instances)
