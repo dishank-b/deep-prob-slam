@@ -137,7 +137,7 @@ class Calib_SLAM(SLAM):
         super().__init__(intrinsics, prior_sigma, odom_sigma)
 
     def _add_landmark(self, instance, add_noise=False):
-        for obj_id, bbox, bbox_covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
+        for obj_id, bbox, bbox_covar in zip(instance.objec10t_key, instance.bbox, instance.bbox_covar):
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_covar)
             box = gtquadric.AlignedBox2(*bbox)
@@ -175,6 +175,7 @@ class IncrementalSLAM(SLAM):
     def optimizer(self):
         # create isam optimizer 
         opt_params = gtsam.ISAM2DoglegParams()
+        opt_params.setAdaptationMode('ONE_STEP_PER_ITERATION')
         # opt_params.setVerbose(True)
         # opt_params.setWildfireThreshold(1e-08)
         params = gtsam.ISAM2Params()
@@ -213,6 +214,7 @@ class IncrementalSLAM(SLAM):
         p_counter = 0
 
         gt_values = instances.toValues()
+        # instances = instances[0:len(instances):15]
 
         # Params to filter bbox close to image boundaries
         image_bounds = gtquadric.AlignedBox2(0, 0, 640, 480)
@@ -221,6 +223,8 @@ class IncrementalSLAM(SLAM):
         filter_bounds = gtquadric.AlignedBox2(filter_bounds)
 
         for i, instance in enumerate(instances):
+            if i % 5 != 0:
+                continue
             if i == 0:
                 curr_key = instance.image_key
                 curr_pose = instance.pose
@@ -267,7 +271,7 @@ class IncrementalSLAM(SLAM):
                     relative_pose_true = previous_pose.between(curr_pose)
                     curr_pose = previous_pose.compose(relative_pose_true.compose(relative_pose_true.Expmap(noise)))
                     # print("After noise")
-                    # print(curr_pose.rotation().rpy())
+                    # print(curr_pose.rota15tion().rpy())
                     # print(curr_pose.translation())
                 odom = previous_pose.between(curr_pose)
 
@@ -294,17 +298,19 @@ class IncrementalSLAM(SLAM):
             current_trajectory[curr_key] = curr_pose
 
             boxes = instance.bbox  # bbox of current frame
+            covs = instance.bbox_covar
             # associate boxes -> quadrics 
             associated_keys = instance.object_key
             # print(associated_keys)
-            # wrap boxes with keys 
+            # wrap boxes with keys
             associated_boxes = []
-            for box, quadric_key in zip(boxes, associated_keys):
+            for box, cov, quadric_key in zip(boxes, covs, associated_keys):
                 # if (quadric_key == 13 or quadric_key == 2 or quadric_key == 4) and counter >= 0 and filter_bounds.contains(gtquadric.AlignedBox2(*box)):
                 if counter >= 0 and filter_bounds.contains(gtquadric.AlignedBox2(*box)):
                     counter = 0
                     associated_boxes.append({
                         'box': box,
+                        'cov': cov,
                         'quadric_key': quadric_key,
                         'pose_key': curr_key,
                     })
@@ -332,13 +338,17 @@ class IncrementalSLAM(SLAM):
                     current_quadrics[quadric_key] = quadric
                     for measurement in quadric_measurements:
                         box = measurement['box']
+                        bbox_covar = measurement['cov']
                         box = gtquadric.AlignedBox2(*box)
                         quadric_key = measurement['quadric_key']
                         pose_key = measurement['pose_key']
                         # bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
                         #                                   self.bbox_noise, "STANDARD")
+                        # bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
+                        #                                   self.std_quadric[quadric_key], "STANDARD")
+                        bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
                         bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
-                                                          self.std_quadric[quadric_key], "STANDARD")
+                                                          bbox_noise, "STANDARD")
                         self.graph.add(bbf)
                         # Add Prior factor to landmarks seen during pose X(0)
                         # if pose_key == 0:
@@ -352,11 +362,15 @@ class IncrementalSLAM(SLAM):
             current_quadrics_keys = current_quadrics.keys()
             for detection in old_boxes:
                 box = detection['box']
+                bbox_covar = measurement['cov']
+                bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
                 box = gtquadric.AlignedBox2(*box)
                 quadric_key = detection['quadric_key']
                 pose_key = detection['pose_key']
+                # bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
+                #                                   self.std_quadric[quadric_key], "STANDARD")
                 bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
-                                                  self.std_quadric[quadric_key], "STANDARD")
+                                                  bbox_noise , "STANDARD")
                 self.graph.add(bbf)
 
             # print(current_quadrics)
@@ -375,11 +389,12 @@ class IncrementalSLAM(SLAM):
                     drawing.box_and_text(gtquadric.AlignedBox2(*frame['box']), (0, 0, 255), text, (0, 0, 0))
 
                 # visualize current view into map
-                camera_pose = current_trajectory[max(current_trajectory.keys())]
-                for quadric in current_quadrics.values():
-                    drawing.quadric(camera_pose, quadric, self.calibration, (255, 0, 255))
+                    camera_pose = current_trajectory[max(current_trajectory.keys())]
+                    for key, quadric in current_quadrics.items():
+                        if key==frame['quadric_key']:
+                            drawing.quadric(camera_pose, quadric, self.calibration, (255, 0, 255))
                 cv2.imshow('current view', image)
-                # cv2.waitKey(0)
+                cv2.waitKey(0)
 
             self.isam.update(self.graph, self.local_estimate)
             self.isam.update()
@@ -466,9 +481,9 @@ def report_on_progress(graph: gtsam.ISAM2, current_estimate: gtsam.Values,
             # print(np.linalg.det(graph.marginalCovariance(key)))
         elif chr(gtsam.symbolChr(key)) == 'x':
             if pose_counter % pose_each == 0:
-                gtsam_plot.plot_pose3(0, current_estimate.atPose3(key), 0.5,
-                                      graph.marginalCovariance(key))
-                # gtsam_plot.plot_pose3(0, current_estimate.atPose3(key), 0.35)
+                # gtsam_plot.plot_pose3(0, current_estimate.atPose3(key), 0.5,
+                #                       graph.marginalCovariance(key))
+                gtsam_plot.plot_pose3(0, current_estimate.atPose3(key), 0.35)
                 pose_counter = 1
                 # print('Added new pose!!!')
                 # print(graph.marginalCovariance(key))
