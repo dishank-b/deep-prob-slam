@@ -12,9 +12,10 @@ def init_quad_single_frame(bbox, camera_pose, camera_intrinsics):
     Hence underdeterminent system. 
     """
     planes = []
-    
-    for i in range(bbox.lines().size()):
-        planes.append(gtquadric.QuadricCamera.transformToImage(camera_pose, camera_intrinsics).transpose()@bbox.lines().at(i))
+    P = gtquadric.QuadricCamera.transformToImage(camera_pose, camera_intrinsics).transpose()
+    lines = bbox.lines()
+    for i in range(lines.size()):
+        planes.append(P@lines.at(i))
     A = []
     
     for plane in planes:

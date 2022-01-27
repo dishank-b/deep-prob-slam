@@ -239,21 +239,21 @@ class IncrementalSLAM(SLAM):
                     'pose_key': curr_key,
                 })
 
-            uncontrained_quadrics_keys = unconstrained_quadrics.keys()
+            unconstrained_quadrics_keys = unconstrained_quadrics.keys()
 
             # initialize new landmarks
             new_boxes = [f for f in associated_boxes if f['quadric_key'] not in current_quadrics.keys()]
             old_boxes = [f for f in associated_boxes if f['quadric_key'] in current_quadrics.keys()]
             for detection in new_boxes:
                 quadric_key = detection['quadric_key']
-                if quadric_key in uncontrained_quadrics_keys:
+                if quadric_key in unconstrained_quadrics_keys:
                     unconstrained_quadrics[quadric_key].append(detection)
                 else:
                     unconstrained_quadrics[quadric_key] = [detection]
 
             # add initialized landmarks to values (if constrained)
             temp_dir = unconstrained_quadrics.copy()
-            for quadric_key in uncontrained_quadrics_keys:
+            for quadric_key in unconstrained_quadrics_keys:
                 quadric_measurements = unconstrained_quadrics[quadric_key]
                 if len(quadric_measurements) > 3:
                     # quadric = initialize_quadric(quadric_measurements, current_trajectory, self.calibration)
