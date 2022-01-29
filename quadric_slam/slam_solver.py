@@ -137,7 +137,7 @@ class Calib_SLAM(SLAM):
         super().__init__(intrinsics, prior_sigma, odom_sigma)
 
     def _add_landmark(self, instance, add_noise=False):
-        for obj_id, bbox, bbox_covar in zip(instance.objec10t_key, instance.bbox, instance.bbox_covar):
+        for obj_id, bbox, bbox_covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_covar)
             box = gtquadric.AlignedBox2(*bbox)
@@ -271,7 +271,7 @@ class IncrementalSLAM(SLAM):
                     relative_pose_true = previous_pose.between(curr_pose)
                     curr_pose = previous_pose.compose(relative_pose_true.compose(relative_pose_true.Expmap(noise)))
                     # print("After noise")
-                    # print(curr_pose.rota15tion().rpy())
+                    # print(curr_pose.rotation().rpy())
                     # print(curr_pose.translation())
                 odom = previous_pose.between(curr_pose)
 
