@@ -16,7 +16,7 @@ class Instances:
     """
     Implement class to handle multiple isntances. 
     """
-    def __init__(self, instances: list["Instance"], calibration: dict = None) -> None:
+    def __init__(self, instances: List["Instance"], calibration: dict = None) -> None:
         self.instances = instances
         if calibration!=None:
             self.calibration = gtsam.Cal3_S2(calibration["fx"], calibration["fy"],
@@ -27,7 +27,7 @@ class Instances:
         self.cam_ids = self._get_cam_ids()
         self.bbox_ids = self._get_box_ids()
     
-    def __getattr__(self, name: str) -> list["Instance"]:
+    def __getattr__(self, name: str) -> List["Instance"]:
         return [instance.get(name) for instance in self.instances]
 
     def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instance":

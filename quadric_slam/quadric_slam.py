@@ -12,7 +12,6 @@ import warnings
 warnings.filterwarnings("ignore")
 
 def main():
-
     runs = 1
 
     np.random.seed(0)
@@ -23,10 +22,11 @@ def main():
             project="quadric_slam",
             entity="deeprobslam",
             group="odom-noisy-box-noisy-gtquad-sweep-init",
-            config = {
-            "odom_sigma" : [2, 0.01],
-            # "odom_sigma" : [0.06, 0.001],
-            "bbox_sigma" : 5, 
+            config={
+                # "odom_sigma": [2, 0.01],
+                "odom_sigma": [0.1, 0.001],
+                # "odom_sigma" : [0.06, 0.001],
+                "bbox_sigma": 5,
             }
         )
 
@@ -34,24 +34,24 @@ def main():
 
         config = wandb.config
 
-        PRIOR_SIGMA = [0.01*np.pi/180]*3 + [1e-4]*3
-        ODOM_SIGMA = [config.odom_sigma[0]*np.pi/180]*3 + [config.odom_sigma[1]]*3  # reasonable range angle = 10-15˚, translation = 10-20cm
-        QUADSLAM_ODOM_SIGMA = [0.001]*6  # QuadricSLAM hyper parameter
-        BOX_SIGMA = [config.bbox_sigma]*4
+        PRIOR_SIGMA = [0.0001 * np.pi / 180] * 3 + [1e-5] * 3
+        ODOM_SIGMA = [config.odom_sigma[0] * np.pi / 180] * 3 + [
+            config.odom_sigma[1]] * 3  # reasonable range angle = 10-15˚, translation = 10-20cm
+        QUADSLAM_ODOM_SIGMA = [0.001] * 6  # QuadricSLAM hyper parameter
+        BOX_SIGMA = [config.bbox_sigma] * 4
         landmarks = True
         add_odom_noise = True
         add_meas_noise = True
 
         file = open("./data/calibration.yaml", 'r')
-        intrinsics  = yaml.load(file)
+        intrinsics = yaml.safe_load(file)
         # instances = dataloader.tum_raw("./data/preprocessed/", intrinsics)
-        instances = dataloader.tum_uncertainty("./data/tum.pth", intrinsics)        # calibrated uncertainty
+        instances = dataloader.tum_uncertainty("./data/tum.pth", intrinsics)  # calibrated uncertainty
         # instances = dataloader.tum_uncertainty("./data/tum_nll.pth", intrinsics)  # nll undertainty
         # instances = instances[:2000]
         visualizer = drawing.Visualizer(instances.cam_ids, instances.bbox_ids, instances.calibration)
         print("-------DATA LOADED--------------")
-        
-        
+
         # slam = SLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA, BOX_SIGMA)
         # slam = Calib_SLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA)
         # slam = QuadricSLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA)
@@ -64,7 +64,7 @@ def main():
         # plt.show()
         print("-------Solving graph--------------")
         # results = slam.solve(initial_estimates)
-        results = slam.solve(instances, add_odom_noise) # to be used with IncrementalSLAM
+        results = slam.solve(instances, add_odom_noise)  # to be used with IncrementalSLAM
 
         print("-------Evaluating--------------")
         # init_metrics = slam.evaluate(instances.toValues(), initial_estimates)
@@ -74,7 +74,7 @@ def main():
         print(metrics)
 
         # print("-------Visualizing----------")
-        visualizer.plot_comparison(instances.toValues(), results, "Init vs Estimated", add_landmarks=landmarks) 
+        visualizer.plot_comparison(instances.toValues(), results, "Init vs Estimated", add_landmarks=landmarks)
 
         fig = visualizer.fig
 
@@ -84,8 +84,6 @@ def main():
 
         # wandb.finish()
 
+
 if __name__ == "__main__":
     main()
-
-
-
