@@ -24,7 +24,7 @@ def main():
             group="odom-noisy-box-noisy-gtquad-sweep-init",
             config={
                 # "odom_sigma": [2, 0.01],
-                "odom_sigma": [0.1, 0.001],
+                "odom_sigma": [0.001, 0.001],
                 # "odom_sigma" : [0.06, 0.001],
                 "bbox_sigma": 5,
             }
@@ -34,9 +34,11 @@ def main():
 
         config = wandb.config
 
-        PRIOR_SIGMA = [0.0001 * np.pi / 180] * 3 + [1e-5] * 3
-        ODOM_SIGMA = [config.odom_sigma[0] * np.pi / 180] * 3 + [
-            config.odom_sigma[1]] * 3  # reasonable range angle = 10-15˚, translation = 10-20cm
+        # PRIOR_SIGMA = [0.0001 * np.pi / 180] * 3 + [1e-5] * 3
+        PRIOR_SIGMA = [0.0001] * 3 + [0.0001] * 3
+        # ODOM_SIGMA = [config.odom_sigma[0] * np.pi / 180] * 3 + [
+        #     config.odom_sigma[1]] * 3  # reasonable range angle = 10-15˚, translation = 10-20cm
+        ODOM_SIGMA = [config.odom_sigma[0]] * 3 + [config.odom_sigma[1]] * 3
         QUADSLAM_ODOM_SIGMA = [0.001] * 6  # QuadricSLAM hyper parameter
         BOX_SIGMA = [config.bbox_sigma] * 4
         landmarks = True

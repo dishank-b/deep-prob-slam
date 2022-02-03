@@ -8,6 +8,7 @@ from gtsam.symbol_shorthand import X, L
 from instances import Instances
 from quadrics_multiview import initialize_quadric
 from drawing import CV2Drawing
+from visualization import report_on_progress
 
 
 class SLAM(object):
@@ -168,6 +169,8 @@ class IncrementalSLAM(SLAM):
         self.std_quadric = None
         self.isam = self.optimizer()
         self.local_estimate = gtsam.Values()
+        self.global_graph = gtsam.NonlinearFactorGraph()
+        self.global_values = gtsam.Values()
 
     def make_graph(self, instances: Instances, add_landmarks=True, add_odom_noise=True, add_meas_noise=True):
         raise AttributeError
@@ -176,6 +179,7 @@ class IncrementalSLAM(SLAM):
         # create isam optimizer 
         opt_params = gtsam.ISAM2DoglegParams()
         opt_params.setAdaptationMode('ONE_STEP_PER_ITERATION')
+        # opt_params = gtsam.ISAM2GaussNewtonParams()
         # opt_params.setVerbose(True)
         # opt_params.setWildfireThreshold(1e-08)
         params = gtsam.ISAM2Params()
@@ -208,13 +212,14 @@ class IncrementalSLAM(SLAM):
 
         self.std_quadric = {q: gtsam.noiseModel.Diagonal.Sigmas(np.array([np.std(wh_quadric[q])] * 4, dtype=float))
                             for q in wh_quadric.keys()}
+        # self.std_quadric = {q: gtsam.noiseModel.Diagonal.Sigmas(np.array([40] * 4, dtype=float))
+        #                     for q in wh_quadric.keys()}
 
         step = 1
         counter = 0
         p_counter = 0
 
         gt_values = instances.toValues()
-        # instances = instances[0:len(instances):15]
 
         # Params to filter bbox close to image boundaries
         image_bounds = gtquadric.AlignedBox2(0, 0, 640, 480)
@@ -223,7 +228,7 @@ class IncrementalSLAM(SLAM):
         filter_bounds = gtquadric.AlignedBox2(filter_bounds)
 
         for i, instance in enumerate(instances):
-            if i % 5 != 0:
+            if i % 1 != 0:
                 continue
             if i == 0:
                 curr_key = instance.image_key
@@ -262,25 +267,15 @@ class IncrementalSLAM(SLAM):
                 curr_pose = instance.pose
                 curr_key = instance.image_key
                 previous_pose = instances[prev_key].pose
-                # previous_pose = current_trajectory[prev_key]
-                # print("Before noise")
-                # print(curr_pose.rotation().rpy())
-                # print(curr_pose.translation())
                 if add_odom_noise:
                     noise = np.random.multivariate_normal(np.zeros(6), self.odometry_noise.covariance())
                     relative_pose_true = previous_pose.between(curr_pose)
                     curr_pose = previous_pose.compose(relative_pose_true.compose(relative_pose_true.Expmap(noise)))
-                    # print("After noise")
-                    # print(curr_pose.rotation().rpy())
-                    # print(curr_pose.translation())
                 odom = previous_pose.between(curr_pose)
 
                 # compound odometry to global pose
                 previous_pose = current_trajectory[prev_key]
                 curr_pose = previous_pose.compose(odom)  # current pose in world frame
-                # print('Weird change')
-                # print(curr_pose.rotation().rpy())
-                # print(curr_pose.translation())
 
                 # add pose estimate to values and current estimateo (for initialization)
                 self.local_estimate.insert(X(curr_key), curr_pose)
@@ -288,6 +283,11 @@ class IncrementalSLAM(SLAM):
                 # add odometry factor to graph
                 odom_factor = gtsam.BetweenFactorPose3(X(prev_key), X(curr_key), odom, self.odometry_noise)
                 self.graph.add(odom_factor)
+
+                # Add prior over previous poses
+                if curr_key < 2:
+                    prior_factor = gtsam.PriorFactorPose3(X(curr_key), instance.pose, self.prior_noise)
+                    self.graph.add(prior_factor)
 
                 # print("add factor betweeen {} and {}".format(prev_key, curr_key))
 
@@ -305,8 +305,8 @@ class IncrementalSLAM(SLAM):
             # wrap boxes with keys
             associated_boxes = []
             for box, cov, quadric_key in zip(boxes, covs, associated_keys):
-                # if (quadric_key == 13 or quadric_key == 2 or quadric_key == 4) and counter >= 0 and filter_bounds.contains(gtquadric.AlignedBox2(*box)):
-                if counter >= 0 and filter_bounds.contains(gtquadric.AlignedBox2(*box)):
+                if (quadric_key != 37 and quadric_key != 41 and quadric_key != 40) and counter >= 0 and filter_bounds.contains(gtquadric.AlignedBox2(*box)):
+                # if counter >= 0 and filter_bounds.contains(gtquadric.AlignedBox2(*box)):
                     counter = 0
                     associated_boxes.append({
                         'box': box,
@@ -331,8 +331,7 @@ class IncrementalSLAM(SLAM):
             temp_dir = unconstrained_quadrics.copy()
             for quadric_key in unconstrained_quadrics_keys:
                 quadric_measurements = unconstrained_quadrics[quadric_key]
-                if len(quadric_measurements) > 5:
-                    # quadric = initialize_quadric(quadric_measurements, current_trajectory, self.calibration)
+                if len(quadric_measurements) > 30:
                     quadric = gtquadric.ConstrainedDualQuadric.getFromValues(gt_values, L(quadric_key))
                     quadric.addToValues(self.local_estimate, L(quadric_key))
                     current_quadrics[quadric_key] = quadric
@@ -343,18 +342,16 @@ class IncrementalSLAM(SLAM):
                         quadric_key = measurement['quadric_key']
                         pose_key = measurement['pose_key']
                         # bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
-                        #                                   self.bbox_noise, "STANDARD")
-                        # bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
                         #                                   self.std_quadric[quadric_key], "STANDARD")
                         bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
                         bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
                                                           bbox_noise, "STANDARD")
                         self.graph.add(bbf)
                         # Add Prior factor to landmarks seen during pose X(0)
-                        # if pose_key == 0:
-                        #     point_noise = gtsam.noiseModel.Isotropic.Sigma(3, 0.1)
-                        #     q_prior = gtsam.PriorFactorPoint3(L(quadric_key), quadric.centroid(), point_noise)
-                        #     self.graph.add(q_prior)
+                        angle_factor_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array([100] * 3, dtype=np.float))
+                        q_factor = gtquadric.QuadricAngleFactor(L(quadric_key), gtquadric.ConstrainedDualQuadric().pose().rotation(),
+                                                                angle_factor_noise)
+                        self.graph.add(q_factor)
                     temp_dir.pop(quadric_key)
 
             unconstrained_quadrics = temp_dir
@@ -370,13 +367,12 @@ class IncrementalSLAM(SLAM):
                 # bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
                 #                                   self.std_quadric[quadric_key], "STANDARD")
                 bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(pose_key), L(quadric_key),
-                                                  bbox_noise , "STANDARD")
+                                                  bbox_noise, "STANDARD")
                 self.graph.add(bbf)
 
             # print(current_quadrics)
             # add local graph and estimate to isam
             # print(self.graph)
-
 
             # draw the current object detections
             if len(current_quadrics) != 0:
@@ -388,28 +384,44 @@ class IncrementalSLAM(SLAM):
                     text = '{}'.format(frame['quadric_key'])
                     drawing.box_and_text(gtquadric.AlignedBox2(*frame['box']), (0, 0, 255), text, (0, 0, 0))
 
-                # visualize current view into map
+                    # visualize current view into map
                     camera_pose = current_trajectory[max(current_trajectory.keys())]
+                    # camera_pose = instance.pose
                     for key, quadric in current_quadrics.items():
-                        if key==frame['quadric_key']:
+                        if key == frame['quadric_key']:
                             drawing.quadric(camera_pose, quadric, self.calibration, (255, 0, 255))
-                cv2.imshow('current view', image)
-                cv2.waitKey(0)
+                # cv2.imshow('current view', image)
+                # cv2.waitKey(0)
 
-            self.isam.update(self.graph, self.local_estimate)
-            self.isam.update()
-            estimate = self.isam.calculateEstimate()
-            # self.graph.saveGraph('current.dot', estimate)
-            # self.isam.saveGraph('test.dot') # This is a clique graph
-            # self.isam.marginalCovariance(X(1)) # Get covariance
-            # self.isam.getFactorsUnsafe()
-            # print(self.isam.getDelta())
+            # add to global graph/values
+            self.global_graph.push_back(self.graph)
+            self.global_values.insert(self.local_estimate)
 
+            # print('\nchecking global graph/values')
+            # v1 = self.valid_system(self.global_graph, self.global_values)
+
+            # Preventing Undetermined error
+            try:
+                self.isam.update(self.graph, self.local_estimate)
+                estimate = self.isam.calculateEstimate()
+                # self.graph.saveGraph('current.dot', estimate)
+                # self.isam.saveGraph('test.dot') # This is a clique graph
+                # self.isam.marginalCovariance(X(1)) # Get covariance
+                # self.isam.getFactorsUnsafe()
+                # print(self.isam.getDelta())
+            except Exception as e:
+                print("Not optimized at step {}".format(step))
+                # clear graph/estimate
+                self.graph.resize(0)
+                self.local_estimate.clear()
+                step += 1
+                print(e)
+                continue
 
             # Report all current state estimates from the iSAM2 optimization.
             if p_counter >= 20:
                 p_counter = 0
-                report_on_progress(self.isam, estimate, curr_key, pose_each=20)
+                report_on_progress(self.isam, estimate, pose_each=20, pose_cov=False, quadric_cov=False)
             p_counter += 1
             # clear graph/estimate
             self.graph.resize(0)
@@ -443,53 +455,40 @@ class IncrementalSLAM(SLAM):
 
         return {"Cam RMSE": cam_rmse}
 
+    def valid_system(self, nlfg, values):
+        '''
+        https://github.com/best-of-acrv/gtsam-quadrics/blob/7faa25d4cb7ce19a2a37304df047e2eee466bb40/quadricslam/quadricslam_online.py
+        '''
 
-import matplotlib.pyplot as plt
-import gtsam.utils.plot as gtsam_plot
+        gfg = nlfg.linearize(values)
+        jacobian = gfg.jacobian()[0]
+        hessian = gfg.hessian()[0]
+        valid = True
+
+        # check if underdetermined
+        if np.linalg.matrix_rank(jacobian) < values.dim() \
+                or np.linalg.matrix_rank(hessian) < values.dim():
+            print('NOT VALID: Undetermined system')
+            valid = False
+
+        # check if indefinite, i.e not positive semidefinite or negative semidefinite
+        eigv = np.linalg.eigh(hessian)[0]
+        if np.any(eigv < 0) and np.any(eigv > 0):
+            print('NOT VALID: indefinite hessian')
+            valid = False
+
+        if not np.all(eigv > 0):
+            print('NOT VALID: not postive definite')
+            valid = False
+
+        # Check conditioning
+        cond = np.linalg.cond(jacobian)
+        print('  Conditioning: ', cond)
+
+        # COND CHECKING:
+        # check almost underconstrained variable
+        # vastly different uncertainties
+        return valid
 
 
-def report_on_progress(graph: gtsam.ISAM2, current_estimate: gtsam.Values,
-                       key: int, pose_each: int = 10):
-    """Print and plot incremental progress of the robot for 2D Pose SLAM using iSAM2."""
 
-    # Print the current estimates computed using iSAM2.
-    # print("*"*50 + f"\nInference after State {key+1}:\n")
-    # print(current_estimate)
-
-    # Compute the marginals for all states in the graph.
-    # marginals = gtsam.Marginals(graph, current_estimate)
-
-    # Plot the newly updated iSAM2 inference.
-    fig = plt.figure(0)
-    axes = fig.gca(projection='3d')
-    plt.cla()
-
-    # update the estimated quadrics and trajectory
-    pose_counter = 0
-    for j in range(len(current_estimate.keys())):
-        key = current_estimate.keys()[j]
-        if chr(gtsam.symbolChr(key)) == 'l':
-            quadric = gtquadric.ConstrainedDualQuadric.getFromValues(current_estimate, key)
-            # This covariance is huge!
-            # gtsam_plot.plot_pose3(0, quadric.pose(), 0.35,
-            #                       graph.marginalCovariance(key))
-            gtsam_plot.plot_pose3(0, quadric.pose(), 0.1)
-            # print('Added new Quadric!!!')
-            evals = np.linalg.eigvals(graph.marginalCovariance(key))
-            print("Max {} and Min {} Eigen values".format(np.max(evals), np.min(evals)))
-            # print(evals)
-            # print(np.linalg.det(graph.marginalCovariance(key)))
-        elif chr(gtsam.symbolChr(key)) == 'x':
-            if pose_counter % pose_each == 0:
-                # gtsam_plot.plot_pose3(0, current_estimate.atPose3(key), 0.5,
-                #                       graph.marginalCovariance(key))
-                gtsam_plot.plot_pose3(0, current_estimate.atPose3(key), 0.35)
-                pose_counter = 1
-                # print('Added new pose!!!')
-                # print(graph.marginalCovariance(key))
-            pose_counter += 1
-
-    axes.set_xlim3d(-2, 3)
-    axes.set_ylim3d(-2, 3)
-    axes.set_zlim3d(0, 2)
-    plt.pause(0.1)
