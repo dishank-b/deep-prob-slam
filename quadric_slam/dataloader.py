@@ -1,3 +1,4 @@
+from tokenize import String
 import numpy as np
 import glob
 import yaml
@@ -41,7 +42,6 @@ def tum_uncertainty(path, intrinsics):
     """
 
     data = torch.load(path, map_location=torch.device('cpu'))
-
     instance_list = []
 
     for key in data['predicted_boxes'].keys():
@@ -58,5 +58,39 @@ def tum_uncertainty(path, intrinsics):
     instance_list.sort(key = lambda x: int(x.image_key))
     
     return Instances(instance_list, intrinsics)
+
+
+def tum_orb(path, intrinsics):
+    """
+    Read the orb slam trajectory and make the dataset according to that. 
+    """
+
+    orb_file = open(path+"/CameraTrajectory_ORBVO.txt", 'r')
+    data = torch.load(path+"/tum.pth", map_location=torch.device('cpu'))
+    file_keys = data['predicted_boxes'].keys()
+    file_keys = list(map(lambda x: x.replace('.png', ''), file_keys))
+    instances_list = []
+    for line in orb_file.readlines():
+        split_line = list(map(float, line.strip().split(" ")))
+        str_name = str(split_line[0])
+        if not str_name in file_keys:
+            continue
+        
+        key = str_name+".png"
+        pose = gtsam.Pose3(gtsam.Rot3.Quaternion(split_line[-1], *split_line[4:-1]), gtsam.Point3(*split_line[1:4]))
+        instance = Instance(bbox = data['predicted_boxes'][key].numpy(),
+                    image_key = int(data['image_keys'][key].numpy()[0]),
+                    bbox_covar = data['predicted_covar_mats'][key].numpy(),
+                    pose = pose,
+                    object_key = [int(x) for x in data['predicted_instance_key'][key].numpy()],
+                    image_path = 'rgbd_dataset_freiburg3_long_office_household/rgb/'+key)
+        
+        instances_list.append(instance)
+
+    instances_list.sort(key = lambda x: int(x.image_key))
+
+    return Instances(instances_list, intrinsics)
+
+
 
 

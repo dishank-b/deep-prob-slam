@@ -13,15 +13,24 @@ class SLAM(object):
     """
     Class for solve the object slam system 
     """
-    def __init__(self, intrinsics, prior_sigma, odom_sigma, bbox_sigma = [20.0]*4) -> None:
+    def __init__(self, intrinsics, config) -> None:
         super().__init__()
         self.graph = self._init_graph()
         self.calibration = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
+        
+        prior_sigma = [config.prior_sigma[0]*np.pi/180]*3 + [config.prior_sigma[1]]*3
         self.prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(prior_sigma, dtype=float))
+        odom_sigma = [config.odom_sigma[0]*np.pi/180]*3 + [config.odom_sigma[1]]*3  # reasonable range angle = 10-15˚, translation = 10-20cm
         self.odometry_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(odom_sigma, dtype=float))
+        bbox_sigma = [config.bbox_sigma]*4
         self.bbox_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(bbox_sigma, dtype=float))
+        
         self.cam_ids = []
         self.bbox_ids = []
+
+        self.add_landmarks = config.add_landmarks
+        self.add_odom_noise = config.add_odom_noise
+        self.add_meas_noise = config.add_measurement_noise
 
     def _init_graph(self):
         """
@@ -38,7 +47,7 @@ class SLAM(object):
             bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), self.bbox_noise)
             self.graph.add(bbf)
 
-    def make_graph(self, instances: Instances, add_landmarks = True, add_odom_noise=True, add_meas_noise=True):
+    def make_graph(self, instances: Instances):
         """
         Make the factor graph to be solved.
         Data association is assumed to be solved for this. 
@@ -57,7 +66,7 @@ class SLAM(object):
             
             if i < len(instances)-1:
                 pose_t1 = instances[i+1].pose
-                if add_odom_noise:
+                if self.add_odom_noise:
                     noise = np.random.multivariate_normal(np.zeros(6), self.odometry_noise.covariance())
                     relative_pose_true = instance.pose.between(pose_t1)
                     pose_t1 = instance.pose.compose(relative_pose_true.compose(pose_t1.Expmap(noise)))
@@ -68,10 +77,10 @@ class SLAM(object):
                 initial_estimate.insert(X(instances[i+1].image_key), pose_t1)
                 # initial_estimate.insert(X(instances[i+1].image_key), initial_estimate.atPose3(X(image_key)).compose(relative_pose))
 
-            if add_landmarks:
-                self._add_landmark(instance, add_meas_noise)
+            if self.add_landmarks:
+                self._add_landmark(instance, self.add_meas_noise)
         
-        if add_landmarks:
+        if self.add_landmarks:
             gt_values = instances.toValues()
             self.bbox_ids = instances.bbox_ids
             for box_id in self.bbox_ids:

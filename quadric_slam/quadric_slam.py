@@ -34,37 +34,48 @@ def main():
 
         config = wandb.config
 
-        PRIOR_SIGMA = [0.01*np.pi/180]*3 + [1e-4]*3
+        PRIOR_SIGMA = [0.001*np.pi/180]*3 + [1e-4]*3
         ODOM_SIGMA = [config.odom_sigma[0]*np.pi/180]*3 + [config.odom_sigma[1]]*3  # reasonable range angle = 10-15˚, translation = 10-20cm
         QUADSLAM_ODOM_SIGMA = [0.001]*6  # QuadricSLAM hyper parameter
         BOX_SIGMA = [config.bbox_sigma]*4
         landmarks = True
-        add_odom_noise = True
-        add_meas_noise = True
+        add_odom_noise = False
+        add_meas_noise = False
 
-        file = open("./data/calibration.yaml", 'r')
+        # Data fr3_office
+        # file = open("./data/calibration.yaml", 'r')
+        # intrinsics  = yaml.load(file)
+        # # instances = dataloader.tum_raw("./data/preprocessed/", intrinsics)
+        # instances = dataloader.tum_uncertainty("./data/tum.pth", intrinsics)        # calibrated uncertainty
+        # # instances = dataloader.tum_uncertainty("./data/tum_nll.pth", intrinsics)  # nll undertainty
+        
+        #data for fr2_desk
+
+        file = open("./data/fr2_desk/calibration.yaml", 'r')
         intrinsics  = yaml.load(file)
         # instances = dataloader.tum_raw("./data/preprocessed/", intrinsics)
-        instances = dataloader.tum_uncertainty("./data/tum.pth", intrinsics)        # calibrated uncertainty
+        # instances = dataloader.tum_uncertainty("./data/fr2_desk/tum.pth", intrinsics)        # calibrated uncertainty
         # instances = dataloader.tum_uncertainty("./data/tum_nll.pth", intrinsics)  # nll undertainty
+        instances = dataloader.tum_orb("./data/fr2_desk", intrinsics)   # Load with orb trajectories.
+        
         # instances = instances[:2000]
         visualizer = drawing.Visualizer(instances.cam_ids, instances.bbox_ids, instances.calibration)
         print("-------DATA LOADED--------------")
         
         
-        # slam = SLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA, BOX_SIGMA)
+        slam = SLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA, BOX_SIGMA)
         # slam = Calib_SLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA)
         # slam = QuadricSLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA)
-        slam = IncrementalSLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA, BOX_SIGMA)
+        # slam = IncrementalSLAM(intrinsics, PRIOR_SIGMA, ODOM_SIGMA, BOX_SIGMA)
 
         print("-------Making graph--------------")
-        # initial_estimates = slam.make_graph(instances, add_landmarks=landmarks, add_odom_noise=add_odom_noise, add_meas_noise=add_meas_noise)
-        # visualizer.plot_comparison(instances.toValues(), initial_estimates, "GT vs Init", add_landmarks = landmarks)
+        initial_estimates = slam.make_graph(instances, add_landmarks=landmarks, add_odom_noise=add_odom_noise, add_meas_noise=add_meas_noise)
+        visualizer.plot_comparison(instances.toValues(), initial_estimates, "GT vs Init", add_landmarks = landmarks)
 
         # plt.show()
         print("-------Solving graph--------------")
-        # results = slam.solve(initial_estimates)
-        results = slam.solve(instances, add_odom_noise) # to be used with IncrementalSLAM
+        results = slam.solve(initial_estimates)
+        # results = slam.solve(instances, add_odom_noise) # to be used with IncrementalSLAM
 
         print("-------Evaluating--------------")
         # init_metrics = slam.evaluate(instances.toValues(), initial_estimates)
