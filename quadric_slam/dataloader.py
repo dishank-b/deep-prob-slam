@@ -73,19 +73,18 @@ def tum_orb(path, intrinsics):
     for line in orb_file.readlines():
         split_line = list(map(float, line.strip().split(" ")))
         str_name = str(split_line[0])
-        if not str_name in file_keys:
-            continue
         
-        key = str_name+".png"
-        pose = gtsam.Pose3(gtsam.Rot3.Quaternion(split_line[-1], *split_line[4:-1]), gtsam.Point3(*split_line[1:4]))
-        instance = Instance(bbox = data['predicted_boxes'][key].numpy(),
-                    image_key = int(data['image_keys'][key].numpy()[0]),
-                    bbox_covar = data['predicted_covar_mats'][key].numpy(),
-                    pose = pose,
-                    object_key = [int(x) for x in data['predicted_instance_key'][key].numpy()],
-                    image_path = 'rgbd_dataset_freiburg3_long_office_household/rgb/'+key)
-        
-        instances_list.append(instance)
+        if str_name in file_keys:
+            key = str_name+".png"
+            orb_pose = gtsam.Pose3(gtsam.Rot3.Quaternion(split_line[-1], *split_line[4:-1]), gtsam.Point3(*split_line[1:4]))
+            instance = Instance(bbox = data['predicted_boxes'][key].numpy(),
+                        image_key = int(data['image_keys'][key].numpy()[0]),
+                        bbox_covar = data['predicted_covar_mats'][key].numpy(),
+                        pose = orb_pose,
+                        object_key = [int(x) for x in data['predicted_instance_key'][key].numpy()],
+                        image_path = 'rgbd_dataset_freiburg3_long_office_household/rgb/'+key)
+            
+            instances_list.append(instance)
 
     instances_list.sort(key = lambda x: int(x.image_key))
 

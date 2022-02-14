@@ -30,17 +30,22 @@ instances = dataloader.tum_orb(dir_path, intrinsics) # Load with orb trajectorie
 visualizer = Visualizer(instances.cam_ids, instances.bbox_ids, instances.calibration)
 
 # slam system
-slam = SLAM(intrinsics, config)
+# slam = SLAM(intrinsics, config)
+slam = Calib_SLAM(intrinsics, config)
+# slam = QuadricSLAM(intrinsics, config)
 initial_estimates = slam.make_graph(instances)
 results = slam.solve(initial_estimates)
 
 # evaluation
+metrics = slam.evaluate(instances.toValues(), initial_estimates)
+print(metrics)
 metrics = slam.evaluate(instances.toValues(), results)
 print(metrics)
 
 # print("-------Visualizing----------")
-visualizer.plot_comparison(instances.toValues(), initial_estimates, "GT vs Init", add_landmarks = config.add_landmarks)
-# visualizer.plot_comparison(instances.toValues(), results, "Init vs Estimated", add_landmarks=config.add_landmarks) 
+print("visualizign")
+# visualizer.plot_comparison(instances.toValues(), initial_estimates, "GT vs Init", add_landmarks = config.add_landmarks)
+visualizer.plot_comparison(instances.toValues(), results, "Init vs Estimated", add_landmarks=config.add_landmarks) 
 
 fig = visualizer.fig
 

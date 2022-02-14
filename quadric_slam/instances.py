@@ -72,7 +72,20 @@ class Instances:
                     bbox_ids.append(int(obj_id))
     
         return bbox_ids
+        
+    def get_bbox_std(self) -> dict:
+        wh_quadric = {q: [] for q in self.bbox_ids}
+        # Compute sum of width and height for each quadric using ALL bboxes
+        for sample in self.instances:
+            w_h_sum = (sample.bbox[:, 2:] - sample.bbox[:, :2]).sum(axis=1)
+            for key, wh in zip(sample.object_key, w_h_sum):
+                wh_quadric[key].append(wh)
 
+        std_quadric = {q: gtsam.noiseModel.Diagonal.Sigmas(np.array([np.std(wh_quadric[q])] * 4, dtype=float))
+                            for q in wh_quadric.keys()}
+
+        return std_quadric
+    
     def __len__(self) -> int:
         return len(self.instances)
 

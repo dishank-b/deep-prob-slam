@@ -39,7 +39,7 @@ class SLAM(object):
         """
         return gtsam.NonlinearFactorGraph()
 
-    def _add_landmark(self, instance, add_noise=True):
+    def _add_landmark(self, instance, bbox_stds, add_noise=True):
         for obj_id, bbox in zip(instance.object_key, instance.bbox):
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, self.bbox_noise.covariance())
@@ -78,7 +78,8 @@ class SLAM(object):
                 # initial_estimate.insert(X(instances[i+1].image_key), initial_estimate.atPose3(X(image_key)).compose(relative_pose))
 
             if self.add_landmarks:
-                self._add_landmark(instance, self.add_meas_noise)
+                quadric_slam_stds = instances.get_bbox_std() # Std dev used in QuadricSLAM paper
+                self._add_landmark(instance, quadric_slam_stds, self.add_meas_noise)
         
         if self.add_landmarks:
             gt_values = instances.toValues()
@@ -135,10 +136,10 @@ class SLAM(object):
         return metrics
 
 class Calib_SLAM(SLAM):
-    def __init__(self,intrinsics, prior_sigma, odom_sigma) -> None:
-        super().__init__(intrinsics, prior_sigma, odom_sigma)
+    def __init__(self,intrinsics, config) -> None:
+        super().__init__(intrinsics, config)
 
-    def _add_landmark(self, instance, add_noise=False):
+    def _add_landmark(self, instance, bbox_stds, add_noise=False):
         for obj_id, bbox, bbox_covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_covar)
@@ -148,14 +149,12 @@ class Calib_SLAM(SLAM):
             self.graph.add(bbf)
 
 class QuadricSLAM(SLAM):
-    def __init__(self,intrinsics, prior_sigma, odom_sigma) -> None:
-        super().__init__(intrinsics, prior_sigma, odom_sigma)
+    def __init__(self,intrinsics, config) -> None:
+        super().__init__(intrinsics, config)
 
-    def _add_landmark(self, instance, add_noise=False):
+    def _add_landmark(self, instance, bbox_stds, add_noise=False):
         for obj_id, bbox in zip(instance.object_key, instance.bbox):
-            sum_wid_hight = bbox[2:].sum()-bbox[:2].sum()
-            bbox_sigma = [sum_wid_hight]*4
-            bbox_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(bbox_sigma, dtype=float))
+            bbox_noise = bbox_stds[obj_id]
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_noise.covariance())
             box = gtquadric.AlignedBox2(*bbox)
