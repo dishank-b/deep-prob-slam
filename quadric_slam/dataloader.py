@@ -65,8 +65,8 @@ def tum_orb(path, intrinsics):
     Read the orb slam trajectory and make the dataset according to that. 
     """
 
-    orb_file = open(path+"/CameraTrajectory_ORBVO.txt", 'r')
-    data = torch.load(path+"/tum.pth", map_location=torch.device('cpu'))
+    orb_file = open(path+"CameraTrajectory_ORBVO.txt", 'r')
+    data = torch.load(path+"tum.pth", map_location=torch.device('cpu'))
     file_keys = data['predicted_boxes'].keys()
     file_keys = list(map(lambda x: x.replace('.png', ''), file_keys))
     instances_list = []
@@ -82,7 +82,7 @@ def tum_orb(path, intrinsics):
                         bbox_covar = data['predicted_covar_mats'][key].numpy(),
                         pose = orb_pose,
                         object_key = [int(x) for x in data['predicted_instance_key'][key].numpy()],
-                        image_path = 'rgbd_dataset_freiburg3_long_office_household/rgb/'+key)
+                        image_path = path+'rgb/'+key)
             
             instances_list.append(instance)
 
