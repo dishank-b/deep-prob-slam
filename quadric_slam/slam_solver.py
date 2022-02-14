@@ -390,8 +390,8 @@ class IncrementalSLAM(SLAM):
                     for key, quadric in current_quadrics.items():
                         if key == frame['quadric_key']:
                             drawing.quadric(camera_pose, quadric, self.calibration, (255, 0, 255))
-                # cv2.imshow('current view', image)
-                # cv2.waitKey(0)
+                cv2.imshow('current view', image)
+                cv2.waitKey(0)
 
             # add to global graph/values
             self.global_graph.push_back(self.graph)
