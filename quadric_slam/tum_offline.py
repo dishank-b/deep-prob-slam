@@ -44,13 +44,14 @@ print(metrics)
 
 # print("-------Visualizing----------")
 print("visualizign")
-# visualizer.plot_comparison(instances.toValues(), initial_estimates, "GT vs Init", add_landmarks = config.add_landmarks)
+visualizer.plot_comparison(instances.toValues(), initial_estimates, "GT vs Init", add_landmarks = config.add_landmarks)
 visualizer.plot_comparison(instances.toValues(), results, "Init vs Estimated", add_landmarks=config.add_landmarks) 
 
 fig = visualizer.fig
 
 plt.show()
 
+visualizer.visualize(instances, results)
 
 
 

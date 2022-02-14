@@ -40,7 +40,7 @@ class Visualizer(object):
         self.calibration = calibration
         self.fig = plt.figure(figsize=(16, 12), dpi=100)
 
-    def visualize(self, instances, values, save_video=False, video_name="video"):
+    def visualize(self, instances, values, gt_pose= False, save_video=False, video_name="video"):
         """
         Visualizing the value estimate of quadrics and trajectory
         """
@@ -48,13 +48,17 @@ class Visualizer(object):
             video=cv2.VideoWriter(video_name+'.avi', cv2.VideoWriter_fourcc(*'MJPG'), 60, (640,480))
             for instance in instances:
                 image_path = instance.image_path
-                image_path = "/".join(["data"] + image_path.split('/')[-2:])
+                # image_path = "/".join(["data"] + image_path.split('/')[-2:])
                 image = cv2.imread(image_path)
                 draw_gt = CV2Drawing(image)
                 for obj_id, bbox in zip(instance.object_key, instance.bbox):
                     box = gtquadric.AlignedBox2(*bbox)
                     quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, L(obj_id))
-                    draw_gt.quadric(instance.pose, quadric, self.calibration, (255,0,255))
+                    if gt_pose:
+                        pose = instance.pose
+                    else:
+                        pose = values.atPose3(X(instance.image_key))
+                    draw_gt.quadric(pose, quadric, self.calibration, (255,0,255))
                     draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255,0,255))
                 video.write(image)
             video.release()
@@ -62,13 +66,17 @@ class Visualizer(object):
         else:
             for instance in instances:
                 image_path = instance.image_path
-                image_path = "/".join(["data"] + image_path.split('/')[-2:])
+                # image_path = "/".join(["data"] + image_path.split('/')[-2:])
                 image = cv2.imread(image_path)
                 draw_gt = CV2Drawing(image)
                 for obj_id, bbox in zip(instance.object_key, instance.bbox):
                     box = gtquadric.AlignedBox2(*bbox)
                     quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, L(obj_id))
-                    draw_gt.quadric(values.atPose3(X(instance.image_key)), quadric, self.calibration, (255,0,255))
+                    if gt_pose:
+                        pose = instance.pose
+                    else:
+                        pose = values.atPose3(X(instance.image_key))
+                    draw_gt.quadric(pose, quadric, self.calibration, (255,0,255))
                     draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255,0,255))
                 cv2.imshow("image", image)
                 cv2.waitKey(1)
