@@ -7,7 +7,8 @@ from config import Config
 
 from slam_solver import *
 from drawing import Visualizer
-import dataloader
+from instances import Instances
+from evaluation import Evaluation
 
 import warnings
 warnings.filterwarnings("ignore")
@@ -22,24 +23,22 @@ config = Config(config)
 
 # load dataset
 dir_path = config.dir
-file = open(dir_path+"calibration.yaml", 'r')
-intrinsics  = yaml.load(file)
-instances = dataloader.tum_orb(dir_path, intrinsics) # Load with orb trajectories.
+instances = Instances.load_dataset(dir_path) # Load with orb trajectories.
 
 # visualizer
 visualizer = Visualizer(instances.cam_ids, instances.bbox_ids, instances.calibration)
 
 # slam system
-# slam = SLAM(intrinsics, config)
-slam = Calib_SLAM(intrinsics, config)
-# slam = QuadricSLAM(intrinsics, config)
+# slam = SLAM(instances.calibration, config)
+slam = Calib_SLAM(instances.calibration, config)
+# slam = QuadricSLAM(instances.calibration, config)
 initial_estimates = slam.make_graph(instances)
 results = slam.solve(initial_estimates)
 
 # evaluation
-metrics = slam.evaluate(instances.toValues(), initial_estimates)
+metrics = slam.evaluate(initial_estimates, results)
 print(metrics)
-metrics = slam.evaluate(instances.toValues(), results)
+metrics = slam.evaluate(instances.get_gt(), results)
 print(metrics)
 
 # print("-------Visualizing----------")

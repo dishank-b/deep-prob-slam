@@ -13,10 +13,10 @@ class SLAM(object):
     """
     Class for solve the object slam system 
     """
-    def __init__(self, intrinsics, config) -> None:
+    def __init__(self, calibration, config) -> None:
         super().__init__()
         self.graph = self._init_graph()
-        self.calibration = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
+        self.calibration = calibration
         
         prior_sigma = [config.prior_sigma[0]*np.pi/180]*3 + [config.prior_sigma[1]]*3
         self.prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(prior_sigma, dtype=float))
@@ -123,21 +123,19 @@ class SLAM(object):
         metrics = {}
         gt_cam = [gt.atPose3(X(id)).translation() for id in self.cam_ids]
         esti_cam = [results.atPose3(X(id)).translation() for id in self.cam_ids]
-
-        init_quad = [gtquadric.ConstrainedDualQuadric.getFromValues(gt, L(id)).centroid() for id in self.bbox_ids]
-        esti_quad = [gtquadric.ConstrainedDualQuadric.getFromValues(results, L(id)).centroid() for id in self.bbox_ids]
-
         cam_rmse = np.array([np.linalg.norm(gt_pose-esti_pose) for gt_pose, esti_pose in zip(gt_cam, esti_cam)]).mean()
-        quad_rmse = np.array([np.linalg.norm(gt_pose-esti_pose) for gt_pose, esti_pose in zip(init_quad, esti_quad)]).mean()
-
         metrics.update({"Cam pose RMSE": cam_rmse})
-        metrics.update({"Quadrics RMSE": quad_rmse})
+
+        # init_quad = [gtquadric.ConstrainedDualQuadric.getFromValues(gt, L(id)).centroid() for id in self.bbox_ids]
+        # esti_quad = [gtquadric.ConstrainedDualQuadric.getFromValues(results, L(id)).centroid() for id in self.bbox_ids]
+        # quad_rmse = np.array([np.linalg.norm(gt_pose-esti_pose) for gt_pose, esti_pose in zip(init_quad, esti_quad)]).mean()
+        # metrics.update({"Quadrics RMSE": quad_rmse})
 
         return metrics
 
 class Calib_SLAM(SLAM):
-    def __init__(self,intrinsics, config) -> None:
-        super().__init__(intrinsics, config)
+    def __init__(self,calibration, config) -> None:
+        super().__init__(calibration, config)
 
     def _add_landmark(self, instance, bbox_stds, add_noise=False):
         for obj_id, bbox, bbox_covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
@@ -149,8 +147,8 @@ class Calib_SLAM(SLAM):
             self.graph.add(bbf)
 
 class QuadricSLAM(SLAM):
-    def __init__(self,intrinsics, config) -> None:
-        super().__init__(intrinsics, config)
+    def __init__(self,calibration, config) -> None:
+        super().__init__(calibration, config)
 
     def _add_landmark(self, instance, bbox_stds, add_noise=False):
         for obj_id, bbox in zip(instance.object_key, instance.bbox):
@@ -162,8 +160,8 @@ class QuadricSLAM(SLAM):
             self.graph.add(bbf)
 
 class IncrementalSLAM(SLAM):
-    def __init__(self, intrinsics, prior_sigma, odom_sigma, bbox_sigma=[20] * 4) -> None:
-        super().__init__(intrinsics, prior_sigma, odom_sigma, bbox_sigma=bbox_sigma)
+    def __init__(self, calibration, prior_sigma, odom_sigma, bbox_sigma=[20] * 4) -> None:
+        super().__init__(calibration, prior_sigma, odom_sigma, bbox_sigma=bbox_sigma)
         self.isam = self.optimizer()
         self.local_estimate = gtsam.Values()
 
