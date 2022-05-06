@@ -10,6 +10,8 @@ import yaml
 import gtsam
 import gtsam_quadrics as gtquadric
 from gtsam.symbol_shorthand import X, L
+# X = lambda i: int(gtsam.symbol(ord('x'), i))
+# L = lambda i: int(gtsam.symbol(ord('l'), i))
 
 from quadrics_multiview import groundtruth_quadrics
 from utils import align_times, read_trajectory, align_trajectory
@@ -21,7 +23,7 @@ class Instances(object):
     """
     Implement class to handle multiple instances.
     """
-    def __init__(self, instances: list["Instance"], calibration) -> None:
+    def __init__(self, instances: List["Instance"], calibration) -> None:
         self.instances = instances
         self.calibration = calibration
         self.cam_ids = self._get_cam_ids()
@@ -75,7 +77,7 @@ class Instances(object):
 
         return cls(instances_list, intrinsics)
 
-    def __getattr__(self, name: str) -> list["Instance"]:
+    def __getattr__(self, name: str) -> List["Instance"]:
         return [instance.get(name) for instance in self.instances]
 
     def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instance":

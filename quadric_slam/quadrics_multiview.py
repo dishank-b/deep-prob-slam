@@ -3,6 +3,8 @@ import numpy as np
 import gtsam
 import gtsam_quadrics as gtquadric
 from gtsam.symbol_shorthand import X, L
+# X = lambda i: int(gtsam.symbol(ord('x'), i))
+# L = lambda i: int(gtsam.symbol(ord('l'), i))
 
 def init_quad_single_frame(bbox, camera_pose, camera_intrinsics):
     """

@@ -7,5 +7,5 @@ odom_sigma: [2, 0.01]
 bbox_sigma: 5
 
 add_landmarks: True
-add_odom_noise: False
+add_odom_noise: True
 add_measurement_noise: False

@@ -21,6 +21,9 @@ from matplotlib.lines import Line2D
 # import gtsam and extension
 import gtsam
 from gtsam.symbol_shorthand import X, L
+# L = lambda i: int(gtsam.symbol(ord('l'), i))
+# X = lambda i: int(gtsam.symbol(ord('x'), i))
+
 import gtsam_quadrics as gtquadric
 import visualization
 
