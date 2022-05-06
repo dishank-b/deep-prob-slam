@@ -356,7 +356,7 @@ class Instances(object):
         """
         # Load Intrinsics
         intrinsics_file = open(path + "calibration.yaml", 'r')
-        intrinsics = yaml.load(intrinsics_file)
+        intrinsics = yaml.safe_load(intrinsics_file)
         intrinsics = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"],
                                    0.0, intrinsics["cx"], intrinsics["cy"])
 
