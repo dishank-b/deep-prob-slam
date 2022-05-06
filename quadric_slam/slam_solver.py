@@ -4,10 +4,14 @@ import cv2
 import gtsam
 import gtsam_quadrics as gtquadric
 from gtsam.symbol_shorthand import X, L
+# X = lambda i: int(gtsam.symbol(ord('x'), i))
+# L = lambda i: int(gtsam.symbol(ord('l'), i))
 
 from instances import Instances
 from quadrics_multiview import initialize_quadric
 from drawing import CV2Drawing
+
+
 
 class SLAM(object):
     """
@@ -96,6 +100,9 @@ class SLAM(object):
         """
         # define lm parameters
         parameters = gtsam.LevenbergMarquardtParams()
+        # parameters = gtsam.DoglegParams()
+        # parameters = gtsam.GaussNewtonParams() 
+        
         parameters.setVerbosityLM("SILENT") # SILENT = 0, SUMMARY, TERMINATION, LAMBDA, TRYLAMBDA, TRYCONFIG, DAMPED, TRYDELTA : VALUES, ERROR 
         parameters.setMaxIterations(100)
         parameters.setlambdaInitial(1e-5)
@@ -103,9 +110,12 @@ class SLAM(object):
         parameters.setlambdaLowerBound(1e-8)
         parameters.setRelativeErrorTol(1e-5)
         parameters.setAbsoluteErrorTol(1e-5)
+        parameters.setFactorization("QR")
 
         # create optimizer
         optimizer = gtsam.LevenbergMarquardtOptimizer(self.graph, initial_estimate, parameters)
+        # optimizer = gtsam.DoglegOptimizer(self.graph, initial_estimate, parameters)
+        # optimizer = gtsam.GaussNewtonOptimizer()(self.graph, initial_estimate, parameters)
 
         # run optimizer
         results = optimizer.optimize()

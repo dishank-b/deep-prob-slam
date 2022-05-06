@@ -15,7 +15,6 @@ warnings.filterwarnings("ignore")
 
 np.random.seed(0)
 
-
 # load config
 config_path = sys.argv[1]
 config = yaml.safe_load(open(config_path, 'r'))
