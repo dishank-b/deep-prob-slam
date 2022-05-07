@@ -388,7 +388,7 @@ class Instances(object):
                                     pose=orb_poses[i],
                                     gt_pose=gt_poses[i],
                                     object_key=[int(x) for x in data['predicted_instance_key'][key].numpy()],
-                                    image_path=path + 'rgb/' + key)
+                                    image_path=os.path.join(path, 'rgb', key))
 
                 instances_list.append(instance)
 

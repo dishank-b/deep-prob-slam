@@ -15,6 +15,7 @@ import sys
 import cv2
 import numpy as np
 import matplotlib.pyplot as plt
+from matplotlib import rcParams
 import matplotlib.patches as patches
 from matplotlib.lines import Line2D
 
@@ -30,17 +31,24 @@ import visualization
 # modify system path so file will work when run directly or as a module
 sys.path.append(os.path.dirname(os.path.dirname(os.path.realpath(__file__))))
 
-# import custom python modules
+plt.style.use('seaborn-whitegrid')
+plt.rcParams.update({'font.size': 16})
+rcParams['axes.labelpad'] = 20
 sys.dont_write_bytecode = True
 
 
 class Visualizer(object):
     def __init__(self, cam_id, obj_id, calibration) -> None:
         super().__init__()
+        self.fig = None
         self.cam_ids = cam_id
         self.bbox_ids = obj_id
         self.calibration = calibration
-        self.fig = plt.figure(figsize=(16, 12), dpi=100)
+        # self.fig = plt.figure(figsize=(16, 12), dpi=100)
+        self.reset_figure()
+        
+    def reset_figure(self):
+        self.fig = plt.figure(figsize=(10, 16), dpi=100)
 
     def visualize(self, instances, values, gt_pose=False, save_video=False, video_name="video"):
         """
@@ -83,12 +91,13 @@ class Visualizer(object):
                 cv2.imshow("image", image)
                 cv2.waitKey(1)
 
-    def plot_comparison(self, gt, results, title="Comparison", add_landmarks=True):
+    def plot_comparison(self, gt, results, title="Comparison",
+                        add_landmarks=True, labels=['Ground Truth', 'Estimated']):
         # plots = {}
         gt_cam = np.array([gt.atPose3(X(id)).translation() for id in self.cam_ids]).T
         esti_cam = np.array([results.atPose3(X(id)).translation() for id in self.cam_ids]).T
         ax = self.add_plot('3d')
-        trajectory = visualization.compare_3d(ax, gt_cam, esti_cam, title)
+        trajectory = visualization.compare_3d(ax, gt_cam, esti_cam, title, labels=labels)
 
         # plots.update({"Cam Trajectory": trajectory})
 
@@ -98,12 +107,12 @@ class Visualizer(object):
             esti_quad = np.array(
                 [gtquadric.ConstrainedDualQuadric.getFromValues(results, L(id)).centroid() for id in self.bbox_ids]).T
             ax = self.add_plot('3d')
-            quads = visualization.compare_quadrics(ax, init_quad, esti_quad, title)
+            quads = visualization.compare_quadrics(ax, init_quad, esti_quad, title, labels=labels)
             # plots.update({"Quadrics pose": quads})
 
         # return plots
 
-    def plot_trajectory(self, values, title="Trajectory", add_landmarks=True):
+    def plot_trajectory(self, values, title="Trajectory", add_landmarks=True, labels = []):
         plots = {}
         cam_poses = np.array([values.atPose3(X(id)).translation() for id in self.cam_ids]).T
         ax = self.add_plot()
@@ -121,14 +130,13 @@ class Visualizer(object):
 
     def add_plot(self, projection=None):
         n = len(self.fig.axes)
-
-        if n == 0:
-            ax = self.fig.add_subplot(111, projection=projection)
-        else:
-            for i in range(n):
-                self.fig.axes[i].change_geometry(1, n + 1, i + 1)
-
-            ax = self.fig.add_subplot(1, n + 1, n + 1, projection=projection)
+        # if n == 0:
+        #     ax = self.fig.add_subplot(111, projection=projection)
+        # else:
+        #     for i in range(n):
+        #         self.fig.axes[i].change_geometry(1, n + 1, i + 1)
+        #
+        ax = self.fig.add_subplot(2, 1, n + 1, projection=projection)
 
         return ax
 
