@@ -46,9 +46,9 @@ class Visualizer(object):
         self.calibration = calibration
         # self.fig = plt.figure(figsize=(16, 12), dpi=100)
         self.reset_figure()
-        
-    def reset_figure(self):
-        self.fig = plt.figure(figsize=(10, 16), dpi=100)
+
+    def reset_figure(self, dims=(10, 16)):
+        self.fig = plt.figure(figsize=dims, dpi=100)
 
     def visualize(self, instances, values, gt_pose=False, save_video=False, video_name="video"):
         """
@@ -112,23 +112,24 @@ class Visualizer(object):
 
         # return plots
 
-    def plot_trajectory(self, values, title="Trajectory", add_landmarks=True, labels = []):
+    def plot_trajectory(self, values, title="Trajectory", add_landmarks=True, labels=[]):
         plots = {}
+        n_plots = 2 if add_landmarks else 1
         cam_poses = np.array([values.atPose3(X(id)).translation() for id in self.cam_ids]).T
-        ax = self.add_plot()
+        ax = self.add_plot(n_plots=1)
         trajectory = visualization.visualize_trajectory(ax, cam_poses, title)
         plots.update({"Cam Trajectory": trajectory})
 
         if add_landmarks:
             quad_poses = np.array(
                 [gtquadric.ConstrainedDualQuadric.getFromValues(values, L(id)).centroid() for id in self.bbox_ids]).T
-            ax = self.add_plot()
+            ax = self.add_plot(n_plots=n_plots)
             quad_poses = visualization.visualize_quadrics(ax, quad_poses, title)
             plots.update({"Quadrics pose": quad_poses})
 
         return plots
 
-    def add_plot(self, projection=None):
+    def add_plot(self, projection=None, n_plots=2):
         n = len(self.fig.axes)
         # if n == 0:
         #     ax = self.fig.add_subplot(111, projection=projection)
@@ -136,7 +137,7 @@ class Visualizer(object):
         #     for i in range(n):
         #         self.fig.axes[i].change_geometry(1, n + 1, i + 1)
         #
-        ax = self.fig.add_subplot(2, 1, n + 1, projection=projection)
+        ax = self.fig.add_subplot(n_plots, 1, n + 1, projection=projection)
 
         return ax
 

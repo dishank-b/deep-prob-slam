@@ -51,21 +51,32 @@ def main(config_path: str) -> None:
 
     # print("-------Visualizing----------")
     print("Visualizing")
+    # Ground truth vs ORB
+    visualizer.reset_figure((10, 8))
     visualizer.plot_comparison(ground_truth, orb_trajectory,
-                               "GT vs ORB", add_landmarks=config.add_landmarks, labels=['GT', 'ORB'])
+                               "GT vs ORB", add_landmarks=False, labels=['GT', 'ORB'])
     # Plot first Figure and reset figure
     fig = visualizer.fig
     plt.show()
+    # Initial estimate vs Final estimate
     visualizer.reset_figure()
     visualizer.plot_comparison(initial_estimates, results, "Init vs Estimation",
                                add_landmarks=config.add_landmarks, labels=['Init', 'Estimation'])
     # Plot first Figure and reset figure
     fig = visualizer.fig
     plt.show()
-    visualizer.reset_figure()
+    # ORB vs Final estimate
+    visualizer.reset_figure((10, 8))
     visualizer.plot_comparison(ground_truth, results,
-                               "GT vs Estimated", add_landmarks=config.add_landmarks, labels=['GT', 'Estimation'])
+                               "ORB vs Estimated", add_landmarks=False, labels=['ORB', 'Estimation'])
     fig = visualizer.fig
+    plt.show()
+    # ORB vs Initialization
+    visualizer.reset_figure()
+    visualizer.plot_comparison(orb_trajectory, initial_estimates,
+                               "ORB vs Init", add_landmarks=config.add_landmarks, labels=['ORB', 'Initialization'])
+    fig = visualizer.fig
+    fig.tight_layout()
     plt.show()
     visualizer.visualize(instances, results)
 
