@@ -51,14 +51,20 @@ def main(config_path: str) -> None:
 
     # print("-------Visualizing----------")
     print("Visualizing")
-    visualizer.plot_comparison(instances.toValues(), initial_estimates,
-                               "ORB vs Init", add_landmarks=config.add_landmarks, labels=['ORB', 'Initialization'])
+    visualizer.plot_comparison(ground_truth, orb_trajectory,
+                               "GT vs ORB", add_landmarks=config.add_landmarks, labels=['GT', 'ORB'])
     # Plot first Figure and reset figure
     fig = visualizer.fig
     plt.show()
     visualizer.reset_figure()
-    visualizer.plot_comparison(instances.toValues(), results,
-                               "ORB vs Estimated", add_landmarks=config.add_landmarks, labels = ['ORB', 'Estimation'])
+    visualizer.plot_comparison(initial_estimates, results, "Init vs Estimation",
+                               add_landmarks=config.add_landmarks, labels=['Init', 'Estimation'])
+    # Plot first Figure and reset figure
+    fig = visualizer.fig
+    plt.show()
+    visualizer.reset_figure()
+    visualizer.plot_comparison(ground_truth, results,
+                               "GT vs Estimated", add_landmarks=config.add_landmarks, labels=['GT', 'Estimation'])
     fig = visualizer.fig
     plt.show()
     visualizer.visualize(instances, results)
