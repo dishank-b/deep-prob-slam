@@ -1,6 +1,7 @@
 # Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved
 import itertools
 from typing import Any, Dict, List, Tuple, Union
+import os
 from PIL import Image, ImageDraw
 
 import torch
@@ -355,15 +356,14 @@ class Instances(object):
         given the directory path.
         """
         # Load Intrinsics
-        intrinsics_file = open(path + "calibration.yaml", 'r')
+        intrinsics_file = open(os.path.join(path, '..', "calibration.yaml"), 'r')
         intrinsics = yaml.safe_load(intrinsics_file)
-        intrinsics = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"],
-                                   0.0, intrinsics["cx"], intrinsics["cy"])
+        intrinsics = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
 
-        orb_keys, orb_poses = read_trajectory(path + "CameraTrajectory_ORBVO.txt")
-        gt_keys, gt_poses = read_trajectory(path + "groundtruth.txt")
+        orb_keys, orb_poses = read_trajectory(os.path.join(path, '..', "trajectories", "CameraTrajectory_ORBVO.txt"))
+        gt_keys, gt_poses = read_trajectory(os.path.join(path, "groundtruth.txt"))
 
-        matches = align_times(orb_keys, gt_keys)  # align orb and gt timestamsp
+        matches = align_times(orb_keys, gt_keys)  # Align orb and gt timestamsp
 
         orb_keys, gt_keys = zip(*matches)
         orb_poses = [orb_poses[key] for key in orb_keys]
@@ -371,7 +371,8 @@ class Instances(object):
 
         gt_poses = align_trajectory(orb_poses, gt_poses)  # align gt trajectory wrt to orb trajectory
 
-        data = torch.load(path + "tum.pth", map_location=torch.device('cpu'))
+        data = torch.load(os.path.join(path, '..', 'probabilistic_detections', "detr_en.pth"),
+                          map_location=torch.device('cpu'))
         file_keys = data['predicted_boxes'].keys()
         file_keys = list(map(lambda x: x.replace('.png', ''), file_keys))
 

@@ -1,6 +1,6 @@
 # Config yaml for the experiments
 
-dir: ./data/TUM/rgbd_dataset_freiburg2_desk/  # always end the path with "/"
+dir: ./data/fr2_desk/rgbd_dataset_freiburg2_desk  # always end the path with "/"
 
 prior_sigma: [0.01, 1e-4] # angle and distance in meter
 odom_sigma: [2, 0.01]

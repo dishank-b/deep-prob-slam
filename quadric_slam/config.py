@@ -1,18 +1,21 @@
-from typing import Any 
+from typing import Any
+
 
 class Config(dict):
     """
     Config object with augmented 
     attribute access
     """
-    def __init__(self, dictionary: dict = None, **kargs) -> None:
-        super().__init__(dictionary, **kargs)
+
+    def __init__(self, dictionary: dict = None, **kwargs) -> None:
+        super().__init__(dictionary, **kwargs)
 
     def __getattribute__(self, __name: str) -> Any:
         return self[__name]
 
     def __setattr__(self, __name: str, __value: Any) -> None:
         return super().__setattr__(__name, __value)
+
 
 if __name__ == '__main__':
     config = {"a": 1}
