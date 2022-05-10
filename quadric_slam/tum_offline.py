@@ -42,12 +42,20 @@ def main(config_path: str) -> None:
     # Evaluation
     ground_truth = instances.get_gt()
     orb_trajectory = instances.toValues()
-    metrics = slam.evaluate(ground_truth, orb_trajectory)
-    print('Ground truth vs ORB estimate: {}'.format(metrics))
-    metrics = slam.evaluate(initial_estimates, results)
-    print('Initial estimate vs Final results: {}'.format(metrics))
-    metrics = slam.evaluate(ground_truth, results)
-    print('Ground truth vs Final estimate: {}'.format(metrics))
+    # Initialize evaluator
+    eval = Evaluation(instances.cam_ids)
+    ate, rpe = eval.evaluate_trajectory(ground_truth, orb_trajectory, type='horn')
+    print('Ground truth vs ORB estimate ATE: {}'.format(ate))
+    ate, rpe = eval.evaluate_trajectory(ground_truth, initial_estimates, type='horn')
+    print('Ground truth vs Initial estimate ATE: {}'.format(ate))
+    ate, rpe = eval.evaluate_trajectory(ground_truth, results, type='horn')
+    print('Ground truth vs Final estimate ATE: {}'.format(ate))
+    # metrics = slam.evaluate(ground_truth, orb_trajectory)
+    # print('Ground truth vs ORB estimate: {}'.format(metrics))
+    # metrics = slam.evaluate(ground_truth, initial_estimates)
+    # print('Ground truth vs Initial estimate: {}'.format(metrics))
+    # metrics = slam.evaluate(ground_truth, results)
+    # print('Ground truth vs Final estimate: {}'.format(metrics))
 
     # print("-------Visualizing----------")
     print("Visualizing")
@@ -57,27 +65,27 @@ def main(config_path: str) -> None:
                                "GT vs ORB", add_landmarks=False, labels=['GT', 'ORB'])
     # Plot first Figure and reset figure
     fig = visualizer.fig
-    plt.show()
-    # Initial estimate vs Final estimate
+    plt.savefig('results/gt_vs_orb.png')
+    # # Initial estimate vs Final estimate
     visualizer.reset_figure()
-    visualizer.plot_comparison(initial_estimates, results, "Init vs Estimation",
-                               add_landmarks=config.add_landmarks, labels=['Init', 'Estimation'])
+    visualizer.plot_comparison(orb_trajectory, results, "ORB vs Final",
+                               add_landmarks=config.add_landmarks, labels=['ORB', 'Final'])
     # Plot first Figure and reset figure
     fig = visualizer.fig
-    plt.show()
+    plt.savefig('results/orb_vs_final.png')
     # ORB vs Final estimate
     visualizer.reset_figure((10, 8))
     visualizer.plot_comparison(ground_truth, results,
-                               "ORB vs Estimated", add_landmarks=False, labels=['ORB', 'Estimation'])
+                               "ORB vs Estimated", add_landmarks=False, labels=['GT', 'Final'])
     fig = visualizer.fig
-    plt.show()
+    plt.savefig('results/gt_vs_final.png')
     # ORB vs Initialization
     visualizer.reset_figure()
     visualizer.plot_comparison(orb_trajectory, initial_estimates,
-                               "ORB vs Init", add_landmarks=config.add_landmarks, labels=['ORB', 'Initialization'])
+                               "ORB vs Init", add_landmarks=config.add_landmarks, labels=['ORB', 'Noisy'])
     fig = visualizer.fig
     fig.tight_layout()
-    plt.show()
+    plt.savefig('results/orb_vs_noisy.png')
     visualizer.visualize(instances, results)
 
 

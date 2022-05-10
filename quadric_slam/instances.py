@@ -369,7 +369,7 @@ class Instances(object):
         orb_poses = [orb_poses[key] for key in orb_keys]
         gt_poses = [gt_poses[key] for key in gt_keys]
 
-        gt_poses = align_trajectory(orb_poses, gt_poses)  # align gt trajectory wrt to orb trajectory
+        # gt_poses = align_trajectory(orb_poses, gt_poses)  # align gt trajectory wrt to orb trajectory
 
         data = torch.load(os.path.join(path, '..', 'probabilistic_detections', "detr_en.pth"),
                           map_location=torch.device('cpu'))

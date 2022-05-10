@@ -26,6 +26,7 @@ from gtsam.symbol_shorthand import X, L
 # X = lambda i: int(gtsam.symbol(ord('x'), i))
 
 import gtsam_quadrics as gtquadric
+from evaluation import Evaluation
 import visualization
 
 # modify system path so file will work when run directly or as a module
@@ -46,6 +47,7 @@ class Visualizer(object):
         self.calibration = calibration
         # self.fig = plt.figure(figsize=(16, 12), dpi=100)
         self.reset_figure()
+        self.eval = Evaluation(self.cam_ids)
 
     def reset_figure(self, dims=(10, 16)):
         self.fig = plt.figure(figsize=dims, dpi=100)
@@ -91,11 +93,14 @@ class Visualizer(object):
                 cv2.imshow("image", image)
                 cv2.waitKey(1)
 
-    def plot_comparison(self, gt, results, title="Comparison",
-                        add_landmarks=True, labels=['Ground Truth', 'Estimated']):
-        # plots = {}
-        gt_cam = np.array([gt.atPose3(X(id)).translation() for id in self.cam_ids]).T
-        esti_cam = np.array([results.atPose3(X(id)).translation() for id in self.cam_ids]).T
+    def plot_comparison(self, gt, results, title="Comparison", add_landmarks=True,
+                        labels=['Ground Truth', 'Estimated'], type='horn'):
+        # Align Trajectories
+        gt_cam, esti_cam = self.eval.align_trajectories(results, gt, type)
+
+        # Plot Trajectory
+        gt_cam = np.array([pose.translation() for pose in gt_cam]).T
+        esti_cam = np.array([pose.translation() for pose in esti_cam]).T
         ax = self.add_plot('3d')
         trajectory = visualization.compare_3d(ax, gt_cam, esti_cam, title, labels=labels)
 
