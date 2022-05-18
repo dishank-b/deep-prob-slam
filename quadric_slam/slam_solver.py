@@ -49,7 +49,7 @@ class SLAM(object):
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, self.bbox_noise.covariance())
             box = gtquadric.AlignedBox2(*bbox)
-            bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), self.bbox_noise)
+            bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), self.bbox_noise, 'TRUNCATED')
             self.graph.add(bbf)
 
     def make_graph(self, instances: Instances):
@@ -114,7 +114,7 @@ class SLAM(object):
         parameters.setlambdaLowerBound(1e-8)
         parameters.setRelativeErrorTol(1e-5)
         parameters.setAbsoluteErrorTol(1e-5)
-        # MULTIFRONTAL_CHOLESKY , MULTIFRONTAL_QR , SEQUENTIAL_CHOLESKY , SEQUENTIAL_QR ,Iterative , CHOLMOD
+        # MULTIFRONTAL_CHOLESKY , MULTIFRONTAL_QR , SEQUENTIAL_CHOLESKY , SEQUENTIAL_QR, Iterative , CHOLMOD
         parameters.setLinearSolverType('MULTIFRONTAL_CHOLESKY')
         # parameters.setFactorization("QR")
 
@@ -163,7 +163,7 @@ class Calib_SLAM(SLAM):
             bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
             # STANDARD, TRUNCATED
             bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id),
-                                              bbox_noise, 'STANDARD')
+                                              bbox_noise, 'TRUNCATED')
             self.graph.add(bbf)
 
 
@@ -177,7 +177,7 @@ class QuadricSLAM(SLAM):
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_noise.covariance())
             box = gtquadric.AlignedBox2(*bbox)
-            bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), bbox_noise)
+            bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id), bbox_noise, 'TRUNCATED')
             self.graph.add(bbf)
 
 

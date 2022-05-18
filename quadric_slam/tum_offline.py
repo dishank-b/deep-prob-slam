@@ -86,7 +86,7 @@ def main(config_path: str) -> None:
     fig = visualizer.fig
     fig.tight_layout()
     plt.savefig('results/orb_vs_noisy.png')
-    visualizer.visualize(instances, results)
+    # visualizer.visualize(instances, results)
 
 
 if __name__ == '__main__':

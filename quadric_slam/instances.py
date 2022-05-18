@@ -17,15 +17,12 @@ from gtsam.symbol_shorthand import X, L
 from quadrics_multiview import groundtruth_quadrics
 from utils import align_times, read_trajectory, align_trajectory
 
-
-
-
 class Instances(object):
     """
     Implement class to handle multiple instances.
     """
     def __init__(self, instances: List["Instance"], calibration) -> None:
-        self.instances = instances
+        super().__setattr__("instances", instances)
         self.calibration = calibration
         self.cam_ids = self._get_cam_ids()
         self.bbox_ids = self._get_box_ids()
@@ -44,35 +41,36 @@ class Instances(object):
                                             0.0, intrinsics["cx"], intrinsics["cy"])
 
         orb_keys, orb_poses = read_trajectory(path+"CameraTrajectory_ORBVO.txt")
-        gt_keys, gt_poses = read_trajectory(path+"groundtruth.txt")
-
-        matches = align_times(orb_keys, gt_keys) # align orb and gt timestamsp
-
-        orb_keys, gt_keys = zip(*matches)
-        orb_poses = [orb_poses[key] for key in orb_keys]
-        gt_poses = [gt_poses[key] for key in gt_keys]
-
-        gt_poses = align_trajectory(orb_poses, gt_poses) # align gt trajectory wrt to orb trajectory
+        
+        # gt_keys, gt_poses = read_trajectory(path+"groundtruth.txt")
+        # matches = align_times(orb_keys, gt_keys) # align orb and gt timestamsp
+        # orb_keys, gt_keys = zip(*matches)
 
         data = torch.load(path+"tum.pth", map_location=torch.device('cpu'))
         file_keys = data['predicted_boxes'].keys()
         file_keys = list(map(lambda x: x.replace('.png', ''), file_keys))
 
+        keys = [key for key in orb_keys if key in file_keys]
+    
+        gt_poses = [data['camera_pose'][key+".png"].numpy()[0] for key in keys]
+        gt_poses = [gtsam.Pose3(gtsam.Rot3.Quaternion(pose[-1], *pose[3:-1]), gtsam.Point3(*pose[0:3])) for pose in gt_poses]
+        orb_poses = [orb_poses[key] for key in keys]
+
+        orb_poses = align_trajectory(gt_poses, orb_poses) # align gt trajectory wrt to orb trajectory
+    
         instances_list = []
 
-        for i in range(len(orb_keys)):
-            orb_key = orb_keys[i]
-            if orb_key in file_keys:
-                key = orb_key+".png"
-                instance = Instance(bbox = data['predicted_boxes'][key].numpy(),
-                            image_key = int(data['image_keys'][key].numpy()[0]),
-                            bbox_covar = data['predicted_covar_mats'][key].numpy(),
-                            pose = orb_poses[i],
-                            gt_pose = gt_poses[i],
-                            object_key = [int(x) for x in data['predicted_instance_key'][key].numpy()],
-                            image_path = path+'rgb/'+key)
+        for i in range(len(keys)):
+            key = keys[i]+".png"    
+            instance = Instance(bbox = data['predicted_boxes'][key].numpy(),
+                        image_key = int(data['image_keys'][key].numpy()[0]),
+                        bbox_covar = data['predicted_covar_mats'][key].numpy(),
+                        pose = orb_poses[i],
+                        gt_pose = gt_poses[i],
+                        object_key = [int(x) for x in data['predicted_instance_key'][key].numpy()],
+                        image_path = path+'rgb/'+key)
 
-                instances_list.append(instance)
+            instances_list.append(instance)
 
         instances_list.sort(key = lambda x: int(x.image_key))
 
@@ -80,6 +78,13 @@ class Instances(object):
 
     def __getattr__(self, name: str) -> List["Instance"]:
         return [instance.get(name) for instance in self.instances]
+
+    def __setattr__(self, __name: str, __value: Any) -> None:
+        if hasattr(self.instances[0], __name):
+            for instance, value in zip(self.instances, __value):
+                setattr(instance, __name, value)
+        else:
+            super().__setattr__(__name, __value)
 
     def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> "Instance":
         """
@@ -134,11 +139,11 @@ class Instances(object):
         wh_quadric = {q: [] for q in self.bbox_ids}
         # Compute sum of width and height for each quadric using ALL bboxes
         for sample in self.instances:
-            w_h_sum = (sample.bbox[:, 2:] - sample.bbox[:, :2]).sum(axis=1)
+            w_h_sum = [[w, h] for w, h in zip(sample.bbox[:, 2]- sample.bbox[:, 0],  sample.bbox[:, 3]- sample.bbox[:, 1])]
             for key, wh in zip(sample.object_key, w_h_sum):
                 wh_quadric[key].append(wh)
 
-        std_quadric = {q: gtsam.noiseModel.Diagonal.Sigmas(np.array([np.std(wh_quadric[q])] * 4, dtype=float))
+        std_quadric = {q: gtsam.noiseModel.Diagonal.Sigmas(np.array([np.std(wh_quadric[q], axis=0).sum()] * 4, dtype=float))
                             for q in wh_quadric.keys()}
 
         return std_quadric
@@ -335,131 +340,3 @@ class Instance:
             s += "{} = {}, ".format(k, v)
         s += "])"
         return s
-
-
-class Instances(object):
-    """
-    Implement class to handle multiple instances.
-    """
-
-    def __init__(self, instances: List[Instance], calibration) -> None:
-        self.instances = instances
-        self.calibration = calibration
-        self.cam_ids = self._get_cam_ids()
-        self.bbox_ids = self._get_box_ids()
-        self.values = None
-
-    @classmethod
-    def load_dataset(cls, path):
-        """
-        Factory method to load Instaces
-        given the directory path.
-        """
-        # Load Intrinsics
-        intrinsics_file = open(os.path.join(path, '..', "calibration.yaml"), 'r')
-        intrinsics = yaml.safe_load(intrinsics_file)
-        intrinsics = gtsam.Cal3_S2(intrinsics["fx"], intrinsics["fy"], 0.0, intrinsics["cx"], intrinsics["cy"])
-
-        orb_keys, orb_poses = read_trajectory(os.path.join(path, '..', "trajectories", "CameraTrajectory_ORBVO.txt"))
-        gt_keys, gt_poses = read_trajectory(os.path.join(path, "groundtruth.txt"))
-
-        matches = align_times(orb_keys, gt_keys)  # Align orb and gt timestamsp
-
-        orb_keys, gt_keys = zip(*matches)
-        orb_poses = [orb_poses[key] for key in orb_keys]
-        gt_poses = [gt_poses[key] for key in gt_keys]
-
-        # gt_poses = align_trajectory(orb_poses, gt_poses)  # align gt trajectory wrt to orb trajectory
-
-        data = torch.load(os.path.join(path, '..', 'probabilistic_detections', "detr_en.pth"),
-                          map_location=torch.device('cpu'))
-        file_keys = data['predicted_boxes'].keys()
-        file_keys = list(map(lambda x: x.replace('.png', ''), file_keys))
-
-        instances_list = []
-
-        for i in range(len(orb_keys)):
-            orb_key = orb_keys[i]
-            if orb_key in file_keys:
-                key = orb_key + ".png"
-                instance = Instance(bbox=data['predicted_boxes'][key].numpy(),
-                                    image_key=int(data['image_keys'][key].numpy()[0]),
-                                    bbox_covar=data['predicted_covar_mats'][key].numpy(),
-                                    pose=orb_poses[i],
-                                    gt_pose=gt_poses[i],
-                                    object_key=[int(x) for x in data['predicted_instance_key'][key].numpy()],
-                                    image_path=os.path.join(path, 'rgb', key))
-
-                instances_list.append(instance)
-
-        instances_list.sort(key=lambda x: int(x.image_key))
-
-        return cls(instances_list, intrinsics)
-
-    def __getattr__(self, name: str) -> List[Instance]:
-        return [instance.get(name) for instance in self.instances]
-
-    def __getitem__(self, item: Union[int, slice, torch.BoolTensor]) -> Instance:
-        """
-        Args:
-            item: an index-like object and will be used to index instances.
-
-        Returns:
-            If `item` is a int, return the data in the corresponding field.
-            Otherwise, returns current `Instances` where all instances are indexed by `item`.
-        """
-        if type(item) == slice:
-            ret = Instances(self.instances[item], self.calibration)
-            return ret
-
-        return self.instances[item]
-
-    def toValues(self) -> gtsam.Values:
-        if self.values == None:
-            self.values = gtsam.Values()
-
-            for key, pose in zip(self.image_key, self.pose):
-                self.values.insert(X(key), pose)
-
-            groundtruth_quadrics(self.instances, self.values, self.calibration)
-
-            return self.values
-
-        else:
-            return self.values
-
-    def get_gt(self) -> gtsam.Values:
-        gt = gtsam.Values()
-        for key, pose in zip(self.image_key, self.gt_pose):
-            gt.insert(X(key), pose)
-
-        return gt
-
-    def _get_cam_ids(self):
-        cam_ids = [instance.image_key for instance in self.instances]
-        return cam_ids
-
-    def _get_box_ids(self):
-        bbox_ids = []
-        for instance in self.instances:
-            for obj_id in instance.object_key:
-                if obj_id not in bbox_ids:
-                    bbox_ids.append(int(obj_id))
-
-        return bbox_ids
-
-    def get_bbox_std(self) -> dict:
-        wh_quadric = {q: [] for q in self.bbox_ids}
-        # Compute sum of width and height for each quadric using ALL bboxes
-        for sample in self.instances:
-            w_h_sum = (sample.bbox[:, 2:] - sample.bbox[:, :2]).sum(axis=1)
-            for key, wh in zip(sample.object_key, w_h_sum):
-                wh_quadric[key].append(wh)
-
-        std_quadric = {q: gtsam.noiseModel.Diagonal.Sigmas(np.array([np.std(wh_quadric[q])] * 4, dtype=float))
-                       for q in wh_quadric.keys()}
-
-        return std_quadric
-
-    def __len__(self) -> int:
-        return len(self.instances)
