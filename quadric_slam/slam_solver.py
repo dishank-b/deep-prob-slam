@@ -24,8 +24,7 @@ class SLAM(object):
 
         prior_sigma = [config.prior_sigma[0] * np.pi / 180] * 3 + [config.prior_sigma[1]] * 3
         self.prior_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(prior_sigma, dtype=float))
-        odom_sigma = [config.odom_sigma[0] * np.pi / 180] * 3 + [
-            config.odom_sigma[1]] * 3  # reasonable range angle = 10-15˚, translation = 10-20cm
+        odom_sigma = [config.odom_sigma[0] * np.pi / 180] * 3 + [ config.odom_sigma[1]] * 3  
         self.odometry_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(odom_sigma, dtype=float))
         bbox_sigma = [config.bbox_sigma] * 4
         self.bbox_noise = gtsam.noiseModel.Diagonal.Sigmas(np.array(bbox_sigma, dtype=float))
@@ -78,7 +77,6 @@ class SLAM(object):
                 relative_pose = instance.pose.between(pose_t1)
                 odometry_factor = gtsam.BetweenFactorPose3(X(image_key), X(instances[i + 1].image_key), relative_pose,
                                                            self.odometry_noise)
-                # odometry_factor = gtsam.BetweenFactorPose3(X(image_key), X(instances[i+1].image_key), relative_pose_true, self.odometry_noise)
                 self.graph.add(odometry_factor)
                 # initial_estimate.insert(X(instances[i+1].image_key), pose_t1)
                 initial_estimate.insert(X(instances[i + 1].image_key),
@@ -88,6 +86,7 @@ class SLAM(object):
                 quadric_slam_stds = instances.get_bbox_std()  # Std dev used in QuadricSLAM paper
                 self._add_landmark(instance, quadric_slam_stds, self.add_meas_noise)
 
+        # TODO: calculate landmarks for initial estimates from inital estimates of camera pose and not gt camera pose
         if self.add_landmarks:
             gt_values = instances.toValues()
             self.bbox_ids = instances.bbox_ids

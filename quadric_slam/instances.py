@@ -74,6 +74,8 @@ class Instances(object):
 
         instances_list.sort(key = lambda x: int(x.image_key))
 
+        print("Loaded {} instances".format(len(instances_list)))
+
         return cls(instances_list, intrinsics)
 
     def __getattr__(self, name: str) -> List["Instance"]:
@@ -150,9 +152,6 @@ class Instances(object):
     
     def __len__(self) -> int:
         return len(self.instances)
-
-    
-
 
 class Instance:
     """
