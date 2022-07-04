@@ -9,7 +9,7 @@ from gtsam.symbol_shorthand import X, L
 
 from instances import Instances
 from quadrics_multiview import initialize_quadric
-from drawing import CV2Drawing
+from drawing import CV2Drawing, IterationVisualizer
 
 
 class SLAM(object):
@@ -37,6 +37,8 @@ class SLAM(object):
         self.add_odom_noise = config.add_odom_noise
         self.add_meas_noise = config.add_measurement_noise
 
+        self.visualizer = IterationVisualizer()
+
     def _init_graph(self):
         """
         Initialize the graph
@@ -61,6 +63,8 @@ class SLAM(object):
         Uses grounth truth odometry as the odometry measurements. 
         """
         initial_estimate = gtsam.Values()
+        self.visualizer.add_gt_trajectory(instances.toValues())
+        self.visualizer.add_bbox_ids(instances.bbox_ids)
 
         for i, instance in enumerate(instances):
             image_key = instance.image_key
@@ -68,21 +72,21 @@ class SLAM(object):
             if i == 0:
                 self.graph.add(gtsam.PriorFactorPose3(X(image_key), instance.pose, self.prior_noise))
                 initial_estimate.insert(X(image_key), gtsam.Pose3(instance.pose))
+                pose_t0 = instance.pose
 
             if i < len(instances) - 1:
                 pose_t1 = instances[i + 1].pose
+                pose_t0t1 = pose_t0.between(pose_t1)
                 if self.add_odom_noise:
                     noise = np.random.multivariate_normal(np.zeros(6), self.odometry_noise.covariance())
-                    relative_pose_true = instance.pose.between(pose_t1)
-                    pose_t1 = instance.pose.compose(relative_pose_true.compose(pose_t1.Expmap(noise)))
-                relative_pose = instance.pose.between(pose_t1)
-                odometry_factor = gtsam.BetweenFactorPose3(X(image_key), X(instances[i + 1].image_key), relative_pose,
+                    pose_t0t1 = instance.pose.between(pose_t1) * gtsam.Pose3().Expmap(noise)
+                    pose_t1 = pose_t0 * pose_t0t1
+                odometry_factor = gtsam.BetweenFactorPose3(X(image_key), X(instances[i + 1].image_key), pose_t0t1,
                                                            self.odometry_noise)
-                # odometry_factor = gtsam.BetweenFactorPose3(X(image_key), X(instances[i+1].image_key), relative_pose_true, self.odometry_noise)
                 self.graph.add(odometry_factor)
-                # initial_estimate.insert(X(instances[i+1].image_key), pose_t1)
                 initial_estimate.insert(X(instances[i + 1].image_key),
-                                        initial_estimate.atPose3(X(image_key)).compose(relative_pose))
+                                        pose_t1)
+                pose_t0 = pose_t1
 
             if self.add_landmarks:
                 quadric_slam_stds = instances.get_bbox_std()  # Std dev used in QuadricSLAM paper
@@ -107,7 +111,7 @@ class SLAM(object):
         # parameters = gtsam.GaussNewtonParams() 
 
         parameters.setVerbosityLM(
-            "SILENT")  # SILENT = 0, SUMMARY, TERMINATION, LAMBDA, TRYLAMBDA, TRYCONFIG, DAMPED, TRYDELTA : VALUES, ERROR
+            "SUMMARY")  # SILENT = 0, SUMMARY, TERMINATION, LAMBDA, TRYLAMBDA, TRYCONFIG, DAMPED, TRYDELTA : VALUES, ERROR
         parameters.setMaxIterations(100)
         parameters.setlambdaInitial(1e-5)
         parameters.setlambdaUpperBound(1e10)
@@ -124,9 +128,21 @@ class SLAM(object):
         # optimizer = gtsam.GaussNewtonOptimizer()(self.graph, initial_estimate, parameters)
 
         # run optimizer
-        results = optimizer.optimize()
+        current_error = optimizer.error()
+        new_error = optimizer.error()
+        converged = False
+        while not converged:
+            current_error = new_error
+            optimizer.iterate()
+            self.visualizer.add_iteration(optimizer.values())
+            new_error = optimizer.error()
+            converged = gtsam.checkConvergence(parameters, current_error,
+                    new_error)
+        #results = optimizer.optimize()
 
-        return results
+        self.visualizer.plot()
+
+        return optimizer.values()
 
     def evaluate(self, gt, results):
         """
@@ -161,6 +177,11 @@ class Calib_SLAM(SLAM):
                 bbox = np.random.multivariate_normal(bbox, bbox_covar)
             box = gtquadric.AlignedBox2(*bbox)
             bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
+            # bbox_noise = bbox_stds[obj_id]
+            # print('f-Cal')
+            # print(bbox_noise.covariance())
+            # print('fixed')
+            # print(bbox_stds[obj_id].covariance())
             # STANDARD, TRUNCATED
             bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id),
                                               bbox_noise, 'TRUNCATED')
@@ -174,6 +195,7 @@ class QuadricSLAM(SLAM):
     def _add_landmark(self, instance, bbox_stds, add_noise=False):
         for obj_id, bbox in zip(instance.object_key, instance.bbox):
             bbox_noise = bbox_stds[obj_id]
+            # print(bbox_noise.covariance())
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_noise.covariance())
             box = gtquadric.AlignedBox2(*bbox)
@@ -215,6 +237,7 @@ class IncrementalSLAM(SLAM):
         step = 1
 
         gt_values = instances.toValues()
+        self.visualizer.add_gt_trajectory(gt_values)
 
         for i, instance in enumerate(instances):
             if i == 0:

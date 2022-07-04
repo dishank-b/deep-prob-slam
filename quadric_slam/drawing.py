@@ -18,6 +18,7 @@ import matplotlib.pyplot as plt
 from matplotlib import rcParams
 import matplotlib.patches as patches
 from matplotlib.lines import Line2D
+from matplotlib.widgets import Slider
 
 # import gtsam and extension
 import gtsam
@@ -37,6 +38,111 @@ plt.rcParams.update({'font.size': 16})
 rcParams['axes.labelpad'] = 20
 sys.dont_write_bytecode = True
 
+class IterationVisualizer(object):
+
+    def __init__(self) -> None:
+        self.iteration_values = {}
+        self.iteration_index = 0;
+        self.gt_values = None
+        fig = plt.figure()
+        self.ax = fig.gca(projection='3d')
+        self.bbox_ids = []
+
+    def add_bbox_ids(self, bbox_ids) -> None:
+        self.bbox_ids = bbox_ids
+
+    def add_iteration(self, values) -> None:
+        self.iteration_values[self.iteration_index] = values
+        self.iteration_index += 1
+
+    def add_gt_trajectory(self, gt_values) -> None:
+        self.gt_values = gt_values
+
+    def plot(self) -> None:
+        # Make a horizontel oriented slider
+        ax_slider = plt.axes([0.25, 0.1, 0.65, 0.03])
+        self.slider = Slider(
+            ax=ax_slider,
+            label="interation",
+            valmin=0,
+            valmax=self.iteration_index-1,
+            valstep=1,
+            valinit=0,
+            orientation="horizontal"
+        )
+        self.slider.on_changed(self.__update_plot)
+
+        plt.show()
+
+    def __update_plot(self, val) -> None:
+
+        self.ax.clear()
+        R = np.eye(3)
+        t = np.ones((3,1))
+        values = self.iteration_values[self.slider.val]
+        # Then 3D poses, if any
+        poses = gtsam.utilities.allPose3s(values)
+        #for key in poses.keys():
+        #    pose = poses.atPose3(key)
+        #    if marginals:
+        #        covariance = marginals.marginalCovariance(key)
+        #    else:
+        #        covariance = None
+
+        est_t = np.array([poses.atPose3(k).translation() for k in poses.keys()]).T
+        print(est_t.shape)
+        if self.gt_values is not None:
+            gt_poses = gtsam.utilities.allPose3s(self.gt_values)
+            gt_t = np.array([gt_poses.atPose3(k).translation() for k in
+                gt_poses.keys()]).T
+            R, t, _ = Evaluation._horn_align(np.matrix(est_t), np.matrix(gt_t))
+            self.ax.plot(gt_t[0,:], gt_t[1,:], gt_t[2, :], color='g', label="Ground Truth")
+
+
+
+        est_t = np.array(np.hstack([ R *
+            np.matrix(poses.atPose3(k).translation()).T + t for k
+            in poses.keys()]))
+        self.ax.plot(est_t[0,:], est_t[1,:], est_t[2, :], color='b', label="Estimated")
+
+        for id in self.bbox_ids:
+            quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values,
+                    L(id))
+            self.__plot_quadric(quadric)
+
+    def __plot_quadric(self, quadric) -> None:
+
+        rotation = quadric.pose().rotation().matrix()
+        translation = quadric.pose().translation()
+
+        # Radii corresponding to the coefficients:
+        rx, ry, rz = quadric.radii()
+
+        # Set of all spherical angles:
+        u = np.linspace(0, 2 * np.pi, 30)
+        v = np.linspace(0, np.pi, 30)
+
+        # Cartesian coordinates that correspond to the spherical angles:
+        x = rx * np.outer(np.cos(u), np.sin(v))
+        y = ry * np.outer(np.sin(u), np.sin(v))
+        z = rz * np.outer(np.ones_like(u), np.cos(v))
+        # w = np.ones(x.shape)
+        points = np.stack((x, y, z))
+
+        points_2D = np.zeros((points.shape[1], points.shape[2], 2))
+
+        # warp points to quadric (3D) and project to image (2D)
+        for i in range(points.shape[1]):
+            for j in range(points.shape[2]):
+                # point = [x[i,j], y[i,j], z[i,j], 1.0]
+                point = points[:, i, j]
+                warped_point = point.dot(np.linalg.inv(rotation))
+                warped_point += translation
+                points[:, i, j] = warped_point
+
+        self.ax.plot_wireframe(points[0,:,:], points[1,:, :], points[2, :, :],
+                color='r')
+ 
 
 class Visualizer(object):
     def __init__(self, cam_id, obj_id, calibration) -> None:
