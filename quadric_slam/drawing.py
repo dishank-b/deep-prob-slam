@@ -14,11 +14,13 @@ import os
 import sys
 import cv2
 import numpy as np
+import matplotlib.cm as cm
+import matplotlib.colors as colors
 import matplotlib.pyplot as plt
 from matplotlib import rcParams
 import matplotlib.patches as patches
 from matplotlib.lines import Line2D
-from matplotlib.widgets import Slider
+from matplotlib.widgets import Slider, CheckButtons
 
 # import gtsam and extension
 import gtsam
@@ -38,12 +40,23 @@ plt.rcParams.update({'font.size': 16})
 rcParams['axes.labelpad'] = 20
 sys.dont_write_bytecode = True
 
+BAD_LANDMARKS = []
+# Indeterminate system error landmarks:
+#BAD_LANDMARKS = [2, 3, 4, 10, 12, 14, 19, 17, 32, 47, 48, 51, 54, 56, 58, 177]
+# Large radii (np.linalg.norm(quadric.radii()) > 0.7)
+#BAD_LANDMARKS = [58, 1, 2, 26, 21, 47, 56, 51, 48, 54, 0]
+# Low detections (detections > 20)
+#BAD_LANDMARKS = [56, 58, 177, 112, 50, 43, 49, 30, 27]
+#BAD_LANDMARKS = [8, 38, 48, 58]
+#BAD_LANDMARKS = [0, 14, 23]
+
 class IterationVisualizer(object):
 
     def __init__(self) -> None:
         self.iteration_values = {}
         self.iteration_index = 0;
         self.gt_values = None
+        self.graph = None
         fig = plt.figure()
         self.ax = fig.gca(projection='3d')
         self.bbox_ids = []
@@ -57,6 +70,9 @@ class IterationVisualizer(object):
 
     def add_gt_trajectory(self, gt_values) -> None:
         self.gt_values = gt_values
+
+    def add_graph(self, graph) -> None:
+        self.graph = graph
 
     def plot(self) -> None:
         # Make a horizontel oriented slider
@@ -72,43 +88,82 @@ class IterationVisualizer(object):
         )
         self.slider.on_changed(self.__update_plot)
 
+        rax = plt.axes([0.05, 0.7, 0.15, 0.15])
+        self.check = CheckButtons(rax, ('Trajectories', 'Quadrics', 'Errors'))
+        self.check.on_clicked(self.__update_plot)
+
+
         plt.show()
 
     def __update_plot(self, val) -> None:
 
         self.ax.clear()
-        R = np.eye(3)
-        t = np.ones((3,1))
+        status = self.check.get_status()
         values = self.iteration_values[self.slider.val]
-        # Then 3D poses, if any
-        poses = gtsam.utilities.allPose3s(values)
-        #for key in poses.keys():
-        #    pose = poses.atPose3(key)
-        #    if marginals:
-        #        covariance = marginals.marginalCovariance(key)
-        #    else:
-        #        covariance = None
+        if status[0]:
+            R = np.eye(3)
+            t = np.ones((3,1))
+            poses = gtsam.utilities.allPose3s(values)
 
-        est_t = np.array([poses.atPose3(k).translation() for k in poses.keys()]).T
-        print(est_t.shape)
-        if self.gt_values is not None:
-            gt_poses = gtsam.utilities.allPose3s(self.gt_values)
-            gt_t = np.array([gt_poses.atPose3(k).translation() for k in
-                gt_poses.keys()]).T
-            R, t, _ = Evaluation._horn_align(np.matrix(est_t), np.matrix(gt_t))
-            self.ax.plot(gt_t[0,:], gt_t[1,:], gt_t[2, :], color='g', label="Ground Truth")
+            est_t = np.array([poses.atPose3(k).translation() for k in poses.keys()]).T
+            if self.gt_values is not None:
+                gt_poses = gtsam.utilities.allPose3s(self.gt_values)
+                gt_t = np.array([gt_poses.atPose3(k).translation() for k in
+                    gt_poses.keys()]).T
+                R, t, _ = Evaluation._horn_align(np.matrix(est_t), np.matrix(gt_t))
+                self.ax.plot(gt_t[0,:], gt_t[1,:], gt_t[2, :], color='g', label="Ground Truth")
 
 
 
-        est_t = np.array(np.hstack([ R *
-            np.matrix(poses.atPose3(k).translation()).T + t for k
-            in poses.keys()]))
-        self.ax.plot(est_t[0,:], est_t[1,:], est_t[2, :], color='b', label="Estimated")
+            est_t = np.array(np.hstack([ R *
+                np.matrix(poses.atPose3(k).translation()).T + t for k
+                in poses.keys()]))
+            self.ax.plot(est_t[0,:], est_t[1,:], est_t[2, :], color='b', label="Estimated")
 
-        for id in self.bbox_ids:
-            quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values,
-                    L(id))
-            self.__plot_quadric(quadric)
+        if status[1]:
+            #marginals = gtsam.Marginals(self.graph, values)
+            det_marginal_cov = {}
+            for id in self.bbox_ids:
+                if id in BAD_LANDMARKS:
+                    continue
+                quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values,
+                        L(id))
+                self.__plot_quadric(quadric)
+                det_marginal_cov[np.linalg.norm(quadric.radii())] = id
+                #det_marginal_cov[id] = np.linalg.det(marginals.marginalCovariance(L(id)))
+
+            print(dict(sorted(det_marginal_cov.items(), key=lambda item: item[0])))
+
+        if status[2]:
+            error_to_factor = {}
+            for i in range(0,self.graph.size()):
+                factor = self.graph.at(i)
+                error_to_factor[factor.error(values)] = factor
+
+            sorted_dict = dict(sorted(error_to_factor.items(), key=lambda item: item[0]))
+            sorted_dict = dict(list(sorted_dict.items())[-100:])
+            smallest_e = list(sorted_dict.items())[0][0]
+            largest_e = list(sorted_dict.items())[-1][0]
+            color_map = cm.ScalarMappable(colors.Normalize(smallest_e,
+                largest_e), "YlOrRd")
+            for error, factor in sorted_dict.items():
+                points = np.empty((0,3))
+                for k in factor.keys():
+                    # 108 is for L (landmark) symbols
+                    if gtsam.symbolChr(k) == 108:
+                        quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, k)
+                        points = np.vstack([points, np.array(quadric.centroid())])
+
+                    # 120 is for X (pose) sybmols
+                    elif gtsam.symbolChr(k) == 120:
+                        points = np.vstack([points,
+                            np.array(values.atPose3(k).translation())])
+                self.ax.plot(points[:,0], points[:,1], points[:,2],
+                        color=color_map.to_rgba(error), label="Errors")
+
+                print(f"{factor.print()} error: {error}")
+
+        self.__set_axes_equal()
 
     def __plot_quadric(self, quadric) -> None:
 
@@ -142,7 +197,31 @@ class IterationVisualizer(object):
 
         self.ax.plot_wireframe(points[0,:,:], points[1,:, :], points[2, :, :],
                 color='r')
- 
+    def __set_axes_equal(self):
+        '''Make axes of 3D plot have equal scale so that spheres appear as spheres,
+        cubes as cubes, etc..  This is one possible solution to Matplotlib's
+        ax.set_aspect('equal') and ax.axis('equal') not working for 3D.
+
+        '''
+
+        x_limits = self.ax.get_xlim3d()
+        y_limits = self.ax.get_ylim3d()
+        z_limits = self.ax.get_zlim3d()
+
+        x_range = abs(x_limits[1] - x_limits[0])
+        x_middle = np.mean(x_limits)
+        y_range = abs(y_limits[1] - y_limits[0])
+        y_middle = np.mean(y_limits)
+        z_range = abs(z_limits[1] - z_limits[0])
+        z_middle = np.mean(z_limits)
+
+        # The plot bounding box is a sphere in the sense of the infinity
+        # norm, hence I call half the max range the plot radius.
+        plot_radius = 0.5*max([x_range, y_range, z_range])
+
+        self.ax.set_xlim3d([x_middle - plot_radius, x_middle + plot_radius])
+        self.ax.set_ylim3d([y_middle - plot_radius, y_middle + plot_radius])
+        self.ax.set_zlim3d([z_middle - plot_radius, z_middle + plot_radius]) 
 
 class Visualizer(object):
     def __init__(self, cam_id, obj_id, calibration) -> None:

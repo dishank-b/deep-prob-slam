@@ -11,6 +11,15 @@ from instances import Instances
 from quadrics_multiview import initialize_quadric
 from drawing import CV2Drawing, IterationVisualizer
 
+BAD_LANDMARKS = []
+# Indeterminate system error landmarks:
+#BAD_LANDMARKS = [2, 3, 4, 10, 12, 14, 19, 17, 32, 47, 48, 51, 54, 56, 58, 177]
+# Large radii (np.linalg.norm(quadric.radii()) > 0.7)
+#BAD_LANDMARKS = [58, 1, 2, 26, 21, 47, 56, 51, 48, 54, 0]
+# Low detections (detections > 20)
+#BAD_LANDMARKS = [56, 58, 177, 112, 50, 43, 49, 30, 27]
+#BAD_LANDMARKS = [8, 38, 48, 58]
+#BAD_LANDMARKS = [0, 14, 23]
 
 class SLAM(object):
     """
@@ -48,6 +57,8 @@ class SLAM(object):
 
     def _add_landmark(self, instance, bbox_stds, add_noise=True):
         for obj_id, bbox in zip(instance.object_key, instance.bbox):
+            if obj_id in BAD_LANDMARKS:
+                continue
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, self.bbox_noise.covariance())
             box = gtquadric.AlignedBox2(*bbox)
@@ -66,6 +77,7 @@ class SLAM(object):
         self.visualizer.add_gt_trajectory(instances.toValues())
         self.visualizer.add_bbox_ids(instances.bbox_ids)
 
+        quadric_slam_stds = instances.get_bbox_std()  # Std dev used in QuadricSLAM paper
         for i, instance in enumerate(instances):
             image_key = instance.image_key
             self.cam_ids.append(image_key)
@@ -89,13 +101,14 @@ class SLAM(object):
                 pose_t0 = pose_t1
 
             if self.add_landmarks:
-                quadric_slam_stds = instances.get_bbox_std()  # Std dev used in QuadricSLAM paper
                 self._add_landmark(instance, quadric_slam_stds, self.add_meas_noise)
 
         if self.add_landmarks:
             gt_values = instances.toValues()
             self.bbox_ids = instances.bbox_ids
             for box_id in self.bbox_ids:
+                if box_id in BAD_LANDMARKS:
+                    continue
                 quadric = gtquadric.ConstrainedDualQuadric.getFromValues(gt_values, L(box_id))
                 quadric.addToValues(initial_estimate, L(box_id))
 
@@ -140,9 +153,13 @@ class SLAM(object):
                     new_error)
         #results = optimizer.optimize()
 
+        results = optimizer.values()
+        #self.graph.printErrors(results)
+
+        self.visualizer.add_graph(self.graph)
         self.visualizer.plot()
 
-        return optimizer.values()
+        return results
 
     def evaluate(self, gt, results):
         """
@@ -173,6 +190,8 @@ class Calib_SLAM(SLAM):
 
     def _add_landmark(self, instance, bbox_stds, add_noise=False):
         for obj_id, bbox, bbox_covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
+            if obj_id in BAD_LANDMARKS:
+                continue
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_covar)
             box = gtquadric.AlignedBox2(*bbox)
