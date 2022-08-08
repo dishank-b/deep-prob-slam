@@ -86,7 +86,10 @@ def main(config_path: str) -> None:
     fig = visualizer.fig
     fig.tight_layout()
     plt.savefig('results/orb_vs_noisy.png')
-    # visualizer.visualize(instances, results)
+    
+    box_ids = []
+    # box_ids = [58, 1, 2, 26, 21, 47, 56, 51, 48, 54, 0]
+    visualizer.visualize(instances, results, save_video=True, box_ids=box_ids)
 
 
 if __name__ == '__main__':

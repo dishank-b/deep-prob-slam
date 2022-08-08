@@ -245,46 +245,48 @@ class Visualizer(object):
     def reset_figure(self, dims=(10, 16)):
         self.fig = plt.figure(figsize=dims, dpi=100)
 
-    def visualize(self, instances, values, gt_pose=False, save_video=False, video_name="video"):
+    def visualize(self, instances, values, gt_pose=False, save_video=False, video_name="video", box_ids = []):
         """
         Visualizing the value estimate of quadrics and trajectory
         """
         if save_video:
             video = cv2.VideoWriter(video_name + '.avi', cv2.VideoWriter_fourcc(*'MJPG'), 60, (640, 480))
-            for instance in instances:
-                image_path = instance.image_path
-                # image_path = "/".join(["data"] + image_path.split('/')[-2:])
-                image = cv2.imread(image_path)
-                draw_gt = CV2Drawing(image)
-                for obj_id, bbox in zip(instance.object_key, instance.bbox):
-                    box = gtquadric.AlignedBox2(*bbox)
-                    quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, L(obj_id))
-                    if gt_pose:
-                        pose = instance.pose
-                    else:
-                        pose = values.atPose3(X(instance.image_key))
-                    draw_gt.quadric(pose, quadric, self.calibration, (255, 0, 255))
-                    draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255, 0, 255))
+        
+        colors = {0: (0, 255, 255), 1:(255, 0, 255), 2: (255, 255, 0)}
+        obj_color = {obj_id: colors[np.random.randint(0, 3)] for obj_id in self.bbox_ids}
+       
+        for instance in instances:
+            image = self._draw_instance(instance, values, gt_pose, box_ids, obj_color)
+            if save_video:
                 video.write(image)
+            else:
+                cv2.imshow("image", image)
+                cv2.waitKey(0)
+        
+        if save_video:
             video.release()
 
-        else:
-            for instance in instances:
-                image_path = instance.image_path
-                # image_path = "/".join(["data"] + image_path.split('/')[-2:])
-                image = cv2.imread(image_path)
-                draw_gt = CV2Drawing(image)
-                for obj_id, bbox in zip(instance.object_key, instance.bbox):
-                    box = gtquadric.AlignedBox2(*bbox)
-                    quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, L(obj_id))
-                    if gt_pose:
-                        pose = instance.pose
-                    else:
-                        pose = values.atPose3(X(instance.image_key))
-                    draw_gt.quadric(pose, quadric, self.calibration, (255, 0, 255))
-                    draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (255, 0, 255))
-                cv2.imshow("image", image)
-                cv2.waitKey(1)
+                
+
+    def _draw_instance(self, instance, values, gt_pose, box_ids, obj_color):
+        image_path = instance.image_path
+        image = cv2.imread(image_path)
+        draw_gt = CV2Drawing(image)
+        
+        for obj_id, bbox, covar in zip(instance.object_key, instance.bbox, instance.bbox_covar):
+            box = gtquadric.AlignedBox2(*bbox)
+            quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values, L(obj_id))
+            if gt_pose:
+                pose = instance.pose
+            else:
+                pose = values.atPose3(X(instance.image_key))
+            draw_gt.quadric(pose, quadric, self.calibration, obj_color[obj_id])
+            if obj_id in box_ids:
+                draw_gt.box_and_text(box, (0, 0, 255), str(obj_id), (0, 0, 0), covar, (0, 255, 255))
+            else:
+                draw_gt.box_and_text(box, (255, 255, 0), str(obj_id), (0, 0, 0), covar, (0, 255, 255))
+        return image
+
 
     def plot_comparison(self, gt, results, title="Comparison", add_landmarks=True,
                         labels=['Ground Truth', 'Estimated'], type='horn'):
@@ -350,6 +352,11 @@ class CV2Drawing(object):
         cv2.rectangle(self._image, (int(box.xmin()), int(box.ymin())), (int(box.xmax()), int(box.ymax())), color,
                       thickness)
 
+    def covar_ellipse(self, covar, box, color=(255, 0, 0), thickness=2):
+        std = np.sqrt(covar)
+        cv2.ellipse(self._image, (int(box.xmin()), int(box.ymin())), (int(4*std[0,0]), int(4*std[1,1])), 0, 0., 360, color, thickness)
+        cv2.ellipse(self._image, (int(box.xmax()), int(box.ymax())), (int(4*std[2,2]), int(4*std[3,3])), 0, 0., 360, color, thickness)
+
     def text(self, text, lower_left, color=(255, 255, 255), thickness=1, background=False, background_color=(0, 0, 255),
              background_margin=3):
         font = cv2.FONT_HERSHEY_SIMPLEX
@@ -375,10 +382,11 @@ class CV2Drawing(object):
             cv2.rectangle(self._image, (int(xmin), int(ymin)), (int(xmax), int(ymax)), background_color, cv2.FILLED)
         cv2.putText(self._image, text, final_position, font, font_scale, color, thickness, cv2.LINE_AA)
 
-    def box_and_text(self, box, box_color, text, text_color):
+    def box_and_text(self, box, box_color, text, text_color, covar, covar_color):
         box_thickness = 2
-        self.box(box, box_color, thickness=box_thickness)
+        # self.box(box, box_color, thickness=box_thickness)
         self.text(text, (box.xmin() - box_thickness, box.ymin() - box_thickness), text_color, 1, True, box_color)
+        # self.covar_ellipse(covar, box, covar_color)
 
     def quadric(self, pose, quadric, calibration, color=(255, 0, 0), alpha=1):
         """ 
