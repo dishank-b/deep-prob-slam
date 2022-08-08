@@ -40,13 +40,18 @@ plt.rcParams.update({'font.size': 16})
 rcParams['axes.labelpad'] = 20
 sys.dont_write_bytecode = True
 
-BAD_LANDMARKS = []
+# BAD_LANDMARKS = []
 # Indeterminate system error landmarks:
-#BAD_LANDMARKS = [2, 3, 4, 10, 12, 14, 19, 17, 32, 47, 48, 51, 54, 56, 58, 177]
 # Large radii (np.linalg.norm(quadric.radii()) > 0.7)
 #BAD_LANDMARKS = [58, 1, 2, 26, 21, 47, 56, 51, 48, 54, 0]
 # Low detections (detections > 20)
-#BAD_LANDMARKS = [56, 58, 177, 112, 50, 43, 49, 30, 27]
+BAD_LANDMARKS = [48, 54, 47, 56, 58, 177, 112, 50, 43, 49, 30, 32, 27, 39, 8,
+        41, 55, 9, 19, 51, 18, 37, 16, 0]
+# Dog Leg indeterminate system
+#BAD_LANDMARKS = [10, 12, 30, 47, 48, 54, 56, 58 ]
+#BAD_LANDMARKS = [2, 3, 4, 8, 10, 12, 14, 19, 17, 23, 24, 30, 32, 38, 43, 47, 48, 50, 51, 54, 56, 58,
+#        112, 177]
+
 #BAD_LANDMARKS = [8, 38, 48, 58]
 #BAD_LANDMARKS = [0, 14, 23]
 
@@ -121,18 +126,19 @@ class IterationVisualizer(object):
             self.ax.plot(est_t[0,:], est_t[1,:], est_t[2, :], color='b', label="Estimated")
 
         if status[1]:
-            #marginals = gtsam.Marginals(self.graph, values)
-            det_marginal_cov = {}
+            marginals = gtsam.Marginals(self.graph, values)
+            det_marginal_cov = []
             for id in self.bbox_ids:
                 if id in BAD_LANDMARKS:
                     continue
                 quadric = gtquadric.ConstrainedDualQuadric.getFromValues(values,
                         L(id))
                 self.__plot_quadric(quadric)
-                det_marginal_cov[np.linalg.norm(quadric.radii())] = id
-                #det_marginal_cov[id] = np.linalg.det(marginals.marginalCovariance(L(id)))
+                #det_marginal_cov[np.linalg.norm(quadric.radii())] = id
+                det_marginal_cov.append((np.linalg.det(marginals.marginalCovariance(L(id))),
+                    id))
 
-            print(dict(sorted(det_marginal_cov.items(), key=lambda item: item[0])))
+            print(dict(sorted(det_marginal_cov, key=lambda item: item[0])))
 
         if status[2]:
             error_to_factor = {}
@@ -148,6 +154,9 @@ class IterationVisualizer(object):
                 largest_e), "YlOrRd")
             for error, factor in sorted_dict.items():
                 points = np.empty((0,3))
+                print(f"{factor.print()} error: {error}")
+                print(f"Linearized: \n {factor.linearize(values).print()}")
+                print(f"Jaconbian: \n {factor.linearize(values).jacobian()}")
                 for k in factor.keys():
                     # 108 is for L (landmark) symbols
                     if gtsam.symbolChr(k) == 108:
@@ -161,7 +170,6 @@ class IterationVisualizer(object):
                 self.ax.plot(points[:,0], points[:,1], points[:,2],
                         color=color_map.to_rgba(error), label="Errors")
 
-                print(f"{factor.print()} error: {error}")
 
         self.__set_axes_equal()
 

@@ -8,7 +8,7 @@ from gtsam.symbol_shorthand import X, L
 # L = lambda i: int(gtsam.symbol(ord('l'), i))
 
 from instances import Instances
-from quadrics_multiview import initialize_quadric
+from quadrics_multiview import initialize_quadric, init_quad_multi_frames
 from drawing import CV2Drawing, IterationVisualizer
 
 BAD_LANDMARKS = []
@@ -17,7 +17,12 @@ BAD_LANDMARKS = []
 # Large radii (np.linalg.norm(quadric.radii()) > 0.7)
 #BAD_LANDMARKS = [58, 1, 2, 26, 21, 47, 56, 51, 48, 54, 0]
 # Low detections (detections > 20)
-#BAD_LANDMARKS = [56, 58, 177, 112, 50, 43, 49, 30, 27]
+BAD_LANDMARKS = [48, 54, 47, 56, 58, 177, 112, 50, 43, 49, 30, 32, 27, 39, 8,
+        41, 55, 9, 19, 51, 18, 37, 16, 0]
+# Dog Leg indeterminate system, and 8, 23, 24 38, 43, 50 which is large radii
+# BAD_LANDMARKS = [2, 3, 4, 8, 10, 12, 14, 19, 17, 23, 24, 30, 32, 38, 43, 47, 48, 50, 51, 54, 56, 58,
+#        112, 177]
+
 #BAD_LANDMARKS = [8, 38, 48, 58]
 #BAD_LANDMARKS = [0, 14, 23]
 
@@ -77,6 +82,7 @@ class SLAM(object):
         self.visualizer.add_gt_trajectory(instances.toValues())
         self.visualizer.add_bbox_ids(instances.bbox_ids)
 
+        obj_dict = {}
         quadric_slam_stds = instances.get_bbox_std()  # Std dev used in QuadricSLAM paper
         for i, instance in enumerate(instances):
             image_key = instance.image_key
@@ -103,14 +109,21 @@ class SLAM(object):
             if self.add_landmarks:
                 self._add_landmark(instance, quadric_slam_stds, self.add_meas_noise)
 
+                for obj_id, box in zip(instance.object_key, instance.bbox):
+                    if obj_id in BAD_LANDMARKS:
+                        continue
+                    if obj_id not in obj_dict:
+                        obj_dict[obj_id] = [[box, instance.pose]]
+                    else:
+                        obj_dict[obj_id].append([box, instance.pose])
+
+
+
         if self.add_landmarks:
-            gt_values = instances.toValues()
-            self.bbox_ids = instances.bbox_ids
-            for box_id in self.bbox_ids:
-                if box_id in BAD_LANDMARKS:
-                    continue
-                quadric = gtquadric.ConstrainedDualQuadric.getFromValues(gt_values, L(box_id))
-                quadric.addToValues(initial_estimate, L(box_id))
+            for obj_id, box_cam_pair in obj_dict.items():
+                quadric = init_quad_multi_frames(*zip(*box_cam_pair), self.calibration)
+                quadric.addToValues(initial_estimate, L(obj_id))
+
 
         return initial_estimate
 
@@ -127,7 +140,7 @@ class SLAM(object):
             "SUMMARY")  # SILENT = 0, SUMMARY, TERMINATION, LAMBDA, TRYLAMBDA, TRYCONFIG, DAMPED, TRYDELTA : VALUES, ERROR
         parameters.setMaxIterations(100)
         parameters.setlambdaInitial(1e-5)
-        parameters.setlambdaUpperBound(1e10)
+        parameters.setlambdaUpperBound(1e25)
         parameters.setlambdaLowerBound(1e-8)
         parameters.setRelativeErrorTol(1e-5)
         parameters.setAbsoluteErrorTol(1e-5)
@@ -137,6 +150,7 @@ class SLAM(object):
 
         # create optimizer
         optimizer = gtsam.LevenbergMarquardtOptimizer(self.graph, initial_estimate, parameters)
+        self.visualizer.add_iteration(optimizer.values())
         # optimizer = gtsam.DoglegOptimizer(self.graph, initial_estimate, parameters)
         # optimizer = gtsam.GaussNewtonOptimizer()(self.graph, initial_estimate, parameters)
 
@@ -195,12 +209,13 @@ class Calib_SLAM(SLAM):
             if add_noise:
                 bbox = np.random.multivariate_normal(bbox, bbox_covar)
             box = gtquadric.AlignedBox2(*bbox)
-            bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar, dtype=float))
+            bbox_noise = gtsam.noiseModel.Gaussian.Covariance(np.array(bbox_covar,
+                dtype=float) * 1)
             # bbox_noise = bbox_stds[obj_id]
-            # print('f-Cal')
-            # print(bbox_noise.covariance())
-            # print('fixed')
-            # print(bbox_stds[obj_id].covariance())
+            #print('f-Cal')
+            #print(bbox_noise.covariance())
+            #print('fixed')
+            #print(bbox_stds[obj_id].covariance())
             # STANDARD, TRUNCATED
             bbf = gtquadric.BoundingBoxFactor(box, self.calibration, X(instance.image_key), L(obj_id),
                                               bbox_noise, 'TRUNCATED')
@@ -213,6 +228,8 @@ class QuadricSLAM(SLAM):
 
     def _add_landmark(self, instance, bbox_stds, add_noise=False):
         for obj_id, bbox in zip(instance.object_key, instance.bbox):
+            if obj_id in BAD_LANDMARKS:
+                continue
             bbox_noise = bbox_stds[obj_id]
             # print(bbox_noise.covariance())
             if add_noise:
