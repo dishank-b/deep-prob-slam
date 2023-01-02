@@ -1,6 +1,6 @@
 # Config yaml for the experiments
 
-dir: ./data/fr3_office/rgbd_dataset_freiburg3_long_office_household # always end the path with "/"
+dir: ./data/fr3_office/ # always end the path with "/"
 
 prior_sigma: [0.01, 1e-4] # angle and distance in meter
 odom_sigma: [0.5, 0.01]

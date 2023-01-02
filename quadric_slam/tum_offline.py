@@ -18,7 +18,11 @@ warnings.filterwarnings("ignore")
 
 
 def main(config_path: str) -> None:
-    runs = 1
+    average_ate = []
+    average_rpe = []
+    # average_landmark_rmse = []
+
+    runs = 10
 
     wandb_config = yaml.safe_load(open(config_path, 'r'))
 
@@ -30,7 +34,7 @@ def main(config_path: str) -> None:
 
         wandb.init(
             mode="disabled",
-            project="CalibSLAM",
+            project="CalibSLAM-thesis",
             entity="deeprobslam",
             group="fr3-calib-odom_no_noise",
             config = wandb_config,
@@ -50,8 +54,8 @@ def main(config_path: str) -> None:
 
         # Slam system
         # slam = SLAM(instances.calibration, config)
-        slam = Calib_SLAM(instances.calibration, config)
-        # slam = QuadricSLAM(instances.calibration, config)
+        # slam = Calib_SLAM(instances.calibration, config)
+        slam = QuadricSLAM(instances.calibration, config)
         initial_estimates = slam.make_graph(instances)
         results = slam.solve(initial_estimates)
 
@@ -67,6 +71,8 @@ def main(config_path: str) -> None:
         wandb.log({"Init error": ate})
         ate, rpe = eval.evaluate_trajectory(ground_truth, results, type='horn')
         print('Ground truth vs Final estimate ATE: {}'.format(ate))
+        average_ate.append(ate)
+        average_rpe.append(rpe)
         wandb.log({"Final error": ate})
         # metrics = slam.evaluate(ground_truth, orb_trajectory)
         # print('Ground truth vs ORB estimate: {}'.format(metrics))
@@ -76,40 +82,42 @@ def main(config_path: str) -> None:
         # print('Ground truth vs Final estimate: {}'.format(metrics))
 
         # print("-------Visualizing----------") 
-        print("Visualizing")
-        # Ground truth vs ORB
-        visualizer.reset_figure((10, 8))
-        # visualizer.plot_comparison(ground_truth, orb_trajectory,
-        #                         "GT vs ORB", add_landmarks=False, labels=['GT', 'ORB'])
+        # print("Visualizing")
+        # # Ground truth vs ORB
+        # visualizer.reset_figure((10, 8))
+        # # visualizer.plot_comparison(ground_truth, orb_trajectory,
+        # #                         "GT vs ORB", add_landmarks=False, labels=['GT', 'ORB'])
+        # # # Plot first Figure and reset figure
+        # # fig = visualizer.fig
+        # # plt.savefig('results/gt_vs_orb.png')
+        # # # # Initial estimate vs Final estimate
+        # # visualizer.reset_figure()
+        # visualizer.plot_comparison(orb_trajectory, results, "ORB vs Final",
+        #                         add_landmarks=config.add_landmarks, labels=['ORB', 'Final'])
         # # Plot first Figure and reset figure
         # fig = visualizer.fig
-        # plt.savefig('results/gt_vs_orb.png')
-        # # # Initial estimate vs Final estimate
-        # visualizer.reset_figure()
-        visualizer.plot_comparison(orb_trajectory, results, "ORB vs Final",
-                                add_landmarks=config.add_landmarks, labels=['ORB', 'Final'])
-        # Plot first Figure and reset figure
-        fig = visualizer.fig
-        wandb.log({"orb_vs_final": wandb.Image(fig)})
-        plt.savefig('results/orb_vs_final.png')
-        # ORB vs Final estimate
-        visualizer.reset_figure((10, 8))
-        # visualizer.plot_comparison(ground_truth, results,
-        #                         "ORB vs Estimated", add_landmarks=False, labels=['GT', 'Final'])
+        # wandb.log({"orb_vs_final": wandb.Image(fig)})
+        # plt.savefig('results/orb_vs_final.png')
+        # # ORB vs Final estimate
+        # visualizer.reset_figure((10, 8))
+        # # visualizer.plot_comparison(ground_truth, results,
+        # #                         "ORB vs Estimated", add_landmarks=False, labels=['GT', 'Final'])
+        # # fig = visualizer.fig
+        # # plt.savefig('results/gt_vs_final.png')
+        # # # ORB vs Initialization
+        # # visualizer.reset_figure()
+        # visualizer.plot_comparison(orb_trajectory, initial_estimates,
+        #                         "ORB vs Init", add_landmarks=config.add_landmarks, labels=['ORB', 'Noisy'])
         # fig = visualizer.fig
-        # plt.savefig('results/gt_vs_final.png')
-        # # ORB vs Initialization
-        # visualizer.reset_figure()
-        visualizer.plot_comparison(orb_trajectory, initial_estimates,
-                                "ORB vs Init", add_landmarks=config.add_landmarks, labels=['ORB', 'Noisy'])
-        fig = visualizer.fig
-        fig.tight_layout()
-        wandb.log({"orb_vs_noisy": wandb.Image(fig)})
-        plt.savefig('results/orb_vs_noisy.png')
-        # visualizer.visualize(instances, results)
+        # fig.tight_layout()
+        # wandb.log({"orb_vs_noisy": wandb.Image(fig)})
+        # plt.savefig('results/orb_vs_noisy.png')
+        # # visualizer.visualize(instances, results)
 
         # wandb.log(metrics | {"Trajectory": wandb.Image(fig)})
         wandb.finish()
+
+    print("Average ATE: {}".format(np.mean(average_ate)), "Average RPE: {}".format(np.mean(average_rpe)))
 
 
 if __name__ == '__main__':
